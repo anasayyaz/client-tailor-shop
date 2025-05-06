@@ -1,0 +1,83 @@
+.navbar {
+  background: linear-gradient(90deg, #800000, #a93226); /* Deep to soft maroon */
+  padding: 12px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  direction: rtl; /* RTL layout for Urdu */
+  text-align: right;
+}
+
+.navbar-left {
+  display: flex;
+  align-items: center;
+  margin-left: auto; /* Push to left in RTL */
+}
+
+.navbar-left img {
+  height: 45px;
+  margin-left: 12px; /* Adjusted for RTL */
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 22px;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-right: 20px;
+}
+
+.nav-link {
+  color: #f8f9fa;
+  font-weight: 600;
+  text-decoration: none;
+  position: relative;
+  padding: 8px 14px;
+  border-radius: 6px;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.nav-link:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+}
+
+.nav-link.active {
+  background-color: #f9a825; /* Golden highlight */
+  color: #800000; /* Maroon text */
+  font-weight: 700;
+}
+
+.nav-link.active::after {
+  display: none; /* Remove underline if using full bg highlight */
+}
+
+@media screen and (max-width: 768px) {
+  .navbar {
+    flex-direction: column;
+    align-items: flex-end; /* Align right for RTL */
+    padding: 10px 20px;
+  }
+
+  .navbar-right {
+    flex-direction: column;
+    align-items: flex-end;
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .nav-link {
+    padding: 8px 0;
+  }
+}

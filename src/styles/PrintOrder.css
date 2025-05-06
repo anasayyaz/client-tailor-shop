@@ -1,0 +1,89 @@
+.print-container {
+    font-family: 'Arial', sans-serif;
+    padding: 20px;
+    width: 700px;
+    margin: auto;
+    background: white;
+    color: #000;
+  }
+  
+  .print-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 10px;
+  }
+  
+  .print-logo {
+    width: 80px;
+    height: auto;
+  }
+  
+  .shop-details h1 {
+    margin: 0;
+    font-size: 24px;
+  }
+  
+  .shop-details p {
+    margin: 2px 0;
+    font-size: 14px;
+  }
+  
+  .print-section {
+    margin: 15px 0;
+  }
+  
+  .print-section h2 {
+    font-size: 18px;
+    margin-bottom: 10px;
+  }
+  
+  .suit-block {
+    margin-left: 20px;
+    margin-bottom: 10px;
+  }
+  
+  .print-signature {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 40px;
+  }
+  
+  .signature-box {
+    width: 40%;
+    border-top: 1px solid black;
+    text-align: center;
+    padding-top: 5px;
+  }
+  
+  .print-footer {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 14px;
+  }
+  
+  /* پرنٹ-specific rules */
+  @media print {
+    body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact; /* ✅ this is the standard property */
+        margin: 0;
+      }
+      
+  
+    .print-container {
+      width: 100%;
+      padding: 10mm;
+      font-size: 12pt;
+    }
+  
+    .print-header,
+    .print-footer {
+      page-break-inside: avoid;
+    }
+  
+    .print-section {
+      page-break-inside: avoid;
+    }
+  }
+  
