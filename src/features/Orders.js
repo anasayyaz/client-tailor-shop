@@ -22,10 +22,10 @@ function Orders() {
 
   const typingTimeout = useRef(null);
 
-  const ORDER_API = "http://localhost:5000/api/orders";
-  const CUSTOMER_API = "http://localhost:5000/api/customers";
-  const SUIT_API = "http://localhost:5000/api/suit-types";
-  const EMP_API = "http://localhost:5000/api/employees";
+  const ORDER_API = "https://server-al-ansari.onrender.com/api/orders";
+  const CUSTOMER_API = "https://server-al-ansari.onrender.com/api/customers";
+  const SUIT_API = "https://server-al-ansari.onrender.com/api/suit-types";
+  const EMP_API = "https://server-al-ansari.onrender.com/api/employees";
 
   useEffect(() => {
     fetchOrders();
@@ -105,7 +105,7 @@ function Orders() {
   };
   const printSlip = async (order) => {
     const res = await axios.get(
-      `http://localhost:5000/api/orders/${order._id}`
+      `https://server-al-ansari.onrender.com/api/orders/${order._id}`
     );
     const data = res.data;
 

@@ -13,8 +13,8 @@ function Customers() {
 
   const [editingId, setEditingId] = useState(null);
 
-  const CUSTOMER_API = "http://localhost:5000/api/customers";
-  const SUIT_API = "http://localhost:5000/api/suit-types";
+  const CUSTOMER_API = "https://server-al-ansari.onrender.com/api/customers";
+  const SUIT_API = "https://server-al-ansari.onrender.com/api/suit-types";
 
   useEffect(() => {
     fetchCustomers();

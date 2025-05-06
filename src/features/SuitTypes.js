@@ -9,7 +9,7 @@ function SuitTypes() {
   });
   const [editingId, setEditingId] = useState(null);
 
-  const API = "http://localhost:5000/api/suit-types";
+  const API = "https://server-al-ansari.onrender.com/api/suit-types";
 
   const fetchSuitTypes = async () => {
     const res = await axios.get(API);

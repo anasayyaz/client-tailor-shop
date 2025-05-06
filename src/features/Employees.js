@@ -16,7 +16,7 @@ function Employees() {
   const [filter, setFilter] = useState({ startDate: "", endDate: "", search: "" });
   const [editingId, setEditingId] = useState(null);
 
-  const API = "http://localhost:5000/api/employees";
+  const API = "https://server-al-ansari.onrender.com/api/employees";
 
   useEffect(() => {
     fetchEmployees();
@@ -24,7 +24,7 @@ function Employees() {
   }, []);
 
   const fetchOrders = async () => {
-    const res = await axios.get("http://localhost:5000/api/orders");
+    const res = await axios.get("https://server-al-ansari.onrender.com/api/orders");
     setAllOrders(res.data);
   };
 

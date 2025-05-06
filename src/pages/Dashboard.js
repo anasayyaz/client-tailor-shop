@@ -19,11 +19,11 @@ function Dashboard() {
   const fetchDashboardData = async () => {
     try {
       const customersRes = await axios.get(
-        "http://localhost:5000/api/customers"
+        "https://server-al-ansari.onrender.com/api/customers"
       );
-      const ordersRes = await axios.get("http://localhost:5000/api/orders");
+      const ordersRes = await axios.get("https://server-al-ansari.onrender.com/api/orders");
       const employeesRes = await axios.get(
-        "http://localhost:5000/api/employees"
+        "https://server-al-ansari.onrender.com/api/employees"
       );
 
       const today = new Date().toISOString().slice(0, 10);

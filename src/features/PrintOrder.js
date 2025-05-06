@@ -13,7 +13,7 @@ function PrintOrder() {
   }, []);
 
   const fetchOrder = async () => {
-    const res = await axios.get(`http://localhost:5000/api/orders`);
+    const res = await axios.get(`https://server-al-ansari.onrender.com/api/orders`);
     const found = res.data.find((o) => o._id === id);
     setOrder(found);
     setTimeout(() => {
