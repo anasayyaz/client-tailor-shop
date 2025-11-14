@@ -1,5 +1,10 @@
 import React, { useEffect, useState, useRef } from "react";
 import axios from "axios";
+import { toast } from "react-toastify";
+import ValidatedInput from "../components/ValidatedInput";
+import ConfirmModal from "../components/ConfirmModal";
+import { validateForm, validateField, validationOptions } from "../utils/validation";
+import { API_ENDPOINTS } from "../config/api";
 
 function Orders() {
   const [orders, setOrders] = useState([]);
@@ -7,7 +12,9 @@ function Orders() {
   const [employees, setEmployees] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
+  const [formErrors, setFormErrors] = useState({});
 
   const [form, setForm] = useState({
     customerPhone: "",
@@ -15,17 +22,14 @@ function Orders() {
     customerName: "",
     suitDetails: [],
     assignedEmployee: "",
-    notes: "", // ✅ ADD THIS
+    notes: "",
   });
 
   const [editingId, setEditingId] = useState(null);
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
 
   const typingTimeout = useRef(null);
-
-  const ORDER_API = "https://server-al-ansari.onrender.com/api/orders";
-  const CUSTOMER_API = "https://server-al-ansari.onrender.com/api/customers";
-  const SUIT_API = "https://server-al-ansari.onrender.com/api/suit-types";
-  const EMP_API = "https://server-al-ansari.onrender.com/api/employees";
+  const searchAbortController = useRef(null);
 
   useEffect(() => {
     fetchOrders();
@@ -33,19 +37,49 @@ function Orders() {
     fetchEmployees();
   }, []);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeout.current) {
+        clearTimeout(typingTimeout.current);
+      }
+      if (searchAbortController.current) {
+        searchAbortController.current.abort();
+      }
+    };
+  }, []);
+
   const fetchOrders = async () => {
-    const res = await axios.get(ORDER_API);
-    setOrders(res.data);
+    try {
+      setLoading(true);
+      const res = await axios.get(API_ENDPOINTS.ORDERS);
+      setOrders(res.data || []);
+    } catch (err) {
+      console.error("Error fetching orders:", err);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchSuitTypes = async () => {
-    const res = await axios.get(SUIT_API);
-    setSuitTypes(res.data);
+    try {
+      const res = await axios.get(API_ENDPOINTS.SUIT_TYPES);
+      setSuitTypes(res.data || []);
+    } catch (err) {
+      console.error("Error fetching suit types:", err);
+      setSuitTypes([]);
+    }
   };
 
   const fetchEmployees = async () => {
-    const res = await axios.get(EMP_API);
-    setEmployees(res.data);
+    try {
+      const res = await axios.get(API_ENDPOINTS.EMPLOYEES);
+      setEmployees(res.data || []);
+    } catch (err) {
+      console.error("Error fetching employees:", err);
+      setEmployees([]);
+    }
   };
 
   const handlePhoneChange = (e) => {
@@ -58,27 +92,49 @@ function Orders() {
       suitDetails: [],
     });
     setHighlightIndex(-1);
+    
+    // Clear error when user starts typing
+    if (formErrors.customerPhone) {
+      setFormErrors(prev => ({ ...prev, customerPhone: "" }));
+    }
 
+    // Cancel previous timeout
     if (typingTimeout.current) {
       clearTimeout(typingTimeout.current);
     }
 
+    // Cancel previous search request
+    if (searchAbortController.current) {
+      searchAbortController.current.abort();
+    }
+
     if (value.length >= 1) {
       typingTimeout.current = setTimeout(async () => {
+        // Create new AbortController for this search
+        searchAbortController.current = new AbortController();
         setSearchLoading(true);
         try {
-          const res = await axios.get(CUSTOMER_API);
+          const res = await axios.get(API_ENDPOINTS.CUSTOMERS, {
+            signal: searchAbortController.current.signal
+          });
           const allCustomers = res.data;
-          const matches = allCustomers.filter((c) => c.phone.startsWith(value));
+          const matches = allCustomers.filter((c) => 
+            c.phone && c.phone.startsWith(value)
+          );
           setSearchResults(matches);
         } catch (err) {
-          console.error(err);
-          setSearchResults([]);
+          // Ignore abort errors
+          if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
+            console.error("Error searching customers:", err);
+            setSearchResults([]);
+          }
+        } finally {
+          setSearchLoading(false);
         }
-        setSearchLoading(false);
       }, 400);
     } else {
       setSearchResults([]);
+      setSearchLoading(false);
     }
   };
 
@@ -103,369 +159,446 @@ function Orders() {
     setSearchResults([]);
     setHighlightIndex(-1);
   };
-  const printSlip = async (order) => {
-    const res = await axios.get(
-      `https://server-al-ansari.onrender.com/api/orders/${order._id}`
-    );
-    const data = res.data;
 
-    const newWindow = window.open("", "_blank");
-
-    const htmlContent = `
-      <html>
-        <head>
-          <title>پرنٹ Order</title>
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              padding: 20px;
-              margin: 0;
-            }
-            .header {
-              display: flex;
-              align-items: center;
-              gap: 15px;
-              margin-bottom: 15px;
-            }
-            .header img {
-              height: 70px;
-            }
-            .shop-info h1 {
-              margin: 0;
-              font-size: 22px;
-            }
-            .section {
-              margin-bottom: 15px;
-            }
-            .signature {
-              display: flex;
-              justify-content: space-between;
-              margin-top: 40px;
-            }
-            .signature div {
-              border-top: 1px solid black;
-              width: 40%;
-              text-align: center;
-              padding-top: 5px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <img src="${window.location.origin}/logo.png" />
-            <div class="shop-info">
-              <h1>AL-ANSARI TAILORS</h1>
-              <p><b>Owner:</b> Irfan Ansari</p>
-              <p><b>Phone:</b> 0301-8019530</p>
-              <p><b>Address:</b> Aman Plaza, Block H3, Phase 2, Johar Town, Lahore</p>
-            </div>
-          </div>
-  
-          <div class="section">
-            <p><b>Customer:</b> ${data.customer?.name || ""}</p>
-            <p><b>Phone:</b> ${data.customer?.phone || ""}</p>
-            <p><b>Date:</b> ${new Date(data.orderDate).toLocaleDateString()}</p>
-          </div>
-  
-          <div class="section">
-            <h3>Order Details</h3>
-            ${data.suitDetails
-              .map(
-                (suit) => `
-              <div>
-                <h4>${suit.suitType?.name || "Suit"}</h4>
-                ${suit.items
-                  .map(
-                    (item) => `
-                  <p><b>${item.itemName}</b>: ${item.sizes
-                      .map((sz) => `${sz.name}: ${sz.value}`)
-                      .join(", ")}</p>
-                `
-                  )
-                  .join("")}
-              </div>
-            `
-              )
-              .join("")}
-          </div>
-  
-          <div class="section">
-            <p><b>Total Items:</b> ${data.suitDetails.reduce(
-              (acc, s) => acc + s.items.length,
-              0
-            )}</p>
-            ${
-              data.assignedEmployee
-                ? `<p><b>Tailor:</b> ${data.assignedEmployee.name}</p>`
-                : ""
-            }
-          </div>
-  
-          <div class="signature">
-            <div>Customer Signature</div>
-            <div>Tailor / Stamp</div>
-          </div>
-  
-          <div class="section" style="text-align:center; margin-top: 30px;">
-            <p>Thank you for choosing Al-Ansari Tailors!</p>
-          </div>
-  
-          <script>
-            setTimeout(() => { window.print(); }, 500);
-          </script>
-        </body>
-      </html>
-    `;
-
-    newWindow.document.open();
-    newWindow.document.write(htmlContent);
-    newWindow.document.close();
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+    
+    // Clear error when user starts typing
+    if (formErrors[name]) {
+      setFormErrors(prev => ({ ...prev, [name]: "" }));
+    }
   };
 
-  const handleKeyDown = (e) => {
-    if (searchResults.length === 0) return;
+  const validateOrderForm = () => {
+    const errors = {};
+    let isValid = true;
 
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHighlightIndex((prev) => (prev + 1) % searchResults.length);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlightIndex(
-        (prev) => (prev - 1 + searchResults.length) % searchResults.length
-      );
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (highlightIndex >= 0 && highlightIndex < searchResults.length) {
-        selectCustomer(searchResults[highlightIndex]);
+    // Validate customer phone
+    if (!form.customerPhone) {
+      errors.customerPhone = "گاہک کا موبائل نمبر درج کرنا ضروری ہے";
+      isValid = false;
+    } else {
+      const phoneValidation = validateField(form.customerPhone, 'phone', validationOptions.phone);
+      if (!phoneValidation.isValid) {
+        errors.customerPhone = phoneValidation.message;
+        isValid = false;
       }
     }
-  };
 
-  const handleOtherChange = (e, suitIndex, itemIndex, sizeIndex) => {
-    const { name, value } = e.target;
-    if (name === "assignedEmployee") {
-      setForm({ ...form, assignedEmployee: value });
-    } else {
-      const updatedSuitDetails = [...form.suitDetails];
-      updatedSuitDetails[suitIndex].items[itemIndex].sizes[sizeIndex].value =
-        value;
-      setForm({ ...form, suitDetails: updatedSuitDetails });
+    // Validate customer selection
+    if (!form.customerId) {
+      errors.customerId = "براہ کرم گاہک منتخب کریں";
+      isValid = false;
     }
+
+    // Validate assigned employee
+    if (!form.assignedEmployee) {
+      errors.assignedEmployee = "براہ کرم ملازم منتخب کریں";
+      isValid = false;
+    }
+
+    // Validate notes (optional)
+    if (form.notes) {
+      const notesValidation = validateField(form.notes, 'notes', validationOptions.notes);
+      if (!notesValidation.isValid) {
+        errors.notes = notesValidation.message;
+        isValid = false;
+      }
+    }
+
+    setFormErrors(errors);
+    return isValid;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const payload = {
-      customer: form.customerId,
-      suitDetails: form.suitDetails,
-      assignedEmployee: form.assignedEmployee || undefined,
-      notes: form.notes, // ✅ ADD THIS
-    };
-
-    if (editingId) {
-      await axios.put(`${ORDER_API}/${editingId}`, payload);
-      setEditingId(null);
-    } else {
-      await axios.post(ORDER_API, payload);
+    
+    if (!validateOrderForm()) {
+      return;
     }
 
-    setForm({
-      customerPhone: "",
-      customerId: "",
-      customerName: "",
-      suitDetails: [],
-      assignedEmployee: "",
-    });
-    fetchOrders();
+    try {
+      setLoading(true);
+      const isEditing = !!editingId;
+      const orderData = {
+        ...form,
+        orderDate: new Date().toISOString(),
+      };
+
+      if (editingId) {
+        await axios.put(`${API_ENDPOINTS.ORDERS}/${editingId}`, orderData);
+        setEditingId(null);
+      } else {
+        await axios.post(API_ENDPOINTS.ORDERS, orderData);
+      }
+
+      setForm({
+        customerPhone: "",
+        customerId: "",
+        customerName: "",
+        suitDetails: [],
+        assignedEmployee: "",
+        notes: "",
+      });
+      setFormErrors({});
+      setSearchResults([]);
+      await fetchOrders();
+      toast.success(isEditing ? "آرڈر کی معلومات کامیابی سے اپ ڈیٹ ہو گئیں" : "آرڈر کامیابی سے بنایا گیا");
+    } catch (error) {
+      console.error("Error saving order:", error);
+      const errorMessage = error.response?.data?.message || "آرڈر کو محفوظ کرنے میں مسئلہ ہوا ہے۔ براہ کرم دوبارہ کوشش کریں۔";
+      setFormErrors({ submit: errorMessage });
+      toast.error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEdit = (order) => {
+    // Handle both populated and non-populated customer data
+    const customerId = order.customer?._id || order.customer || order.customerId || "";
+    const customerName = order.customer?.name || order.customerName || "";
+    const customerPhone = order.customer?.phone || order.customerPhone || "";
+    
     setForm({
-      customerPhone: "",
-      customerId: order.customer?._id,
-      customerName: order.customer?.name || "",
-      suitDetails: order.suitDetails,
-      assignedEmployee: order.assignedEmployee?._id || "",
+      customerPhone: customerPhone,
+      customerId: customerId,
+      customerName: customerName,
+      suitDetails: order.suitDetails || [],
+      assignedEmployee: order.assignedEmployee?._id || order.assignedEmployee || "",
+      notes: order.notes || "",
     });
     setEditingId(order._id);
+    setFormErrors({});
   };
 
-  const handleDelete = async (id) => {
-    await axios.delete(`${ORDER_API}/${id}`);
-    fetchOrders();
+  const handleDelete = (id) => {
+    setDeleteModal({ isOpen: true, id });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteModal.id) return;
+    
+    try {
+      setLoading(true);
+      await axios.delete(`${API_ENDPOINTS.ORDERS}/${deleteModal.id}`);
+      await fetchOrders();
+      toast.success("آرڈر کامیابی سے حذف ہو گیا");
+    } catch (error) {
+      console.error("Error deleting order:", error);
+      toast.error("آرڈر کو حذف کرنے میں مسئلہ ہوا ہے۔ براہ کرم دوبارہ کوشش کریں۔");
+    } finally {
+      setLoading(false);
+      setDeleteModal({ isOpen: false, id: null });
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIndex((prev) =>
+        prev < searchResults.length - 1 ? prev + 1 : prev
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIndex((prev) => (prev > 0 ? prev - 1 : -1));
+    } else if (e.key === "Enter" && highlightIndex >= 0) {
+      e.preventDefault();
+      selectCustomer(searchResults[highlightIndex]);
+    }
   };
 
   return (
-    <div>
-      <h2>Orders</h2>
+    <div dir="rtl" style={{ direction: 'rtl', textAlign: 'right' }}>
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, id: null })}
+        onConfirm={confirmDelete}
+        title="آرڈر حذف کریں"
+        message="کیا آپ واقعی اس آرڈر کو حذف کرنا چاہتے ہیں؟"
+        confirmText="حذف کریں"
+        cancelText="منسوخ کریں"
+      />
+      <h2 style={{ direction: 'rtl', textAlign: 'right' }}>آرڈرز کا انتظام</h2>
+
       <div className="card">
-        <form
-          onSubmit={handleSubmit}
-          style={{ padding: "10px", marginBottom: "20px" }}
-        >
-          <label>Customer Phone:</label>
-          <input
-            name="customerPhone"
-            value={form.customerPhone}
-            onChange={handlePhoneChange}
-            onKeyDown={handleKeyDown}
-            style={{ position: "relative" }}
-          />
-          {/* Spinner while loading */}
-          {searchLoading && <div className="loader"></div>}
-
-          {/* Search Results Dropdown */}
-          {searchResults.length > 0 && (
-            <div
-              style={{
-                border: "1px solid #ccc",
-                background: "white",
-                maxHeight: "150px",
-                overflowY: "auto",
-                marginTop: "5px",
-                position: "absolute",
-                width: "250px",
-                zIndex: 1000,
-              }}
-            >
-              {searchResults.map((cust, index) => (
-                <div
-                  key={cust._id}
-                  onClick={() => selectCustomer(cust)}
-                  style={{
-                    padding: "5px 10px",
-                    borderBottom: "1px solid #eee",
-                    backgroundColor:
-                      highlightIndex === index ? "#f0f0f0" : "white",
-                    cursor: "pointer",
-                  }}
-                >
-                  {cust.name} ({cust.phone})
+        <h3>{editingId ? "آرڈر میں ترمیم" : "نیا آرڈر بنائیں"}</h3>
+        
+        <form onSubmit={handleSubmit}>
+          {formErrors.submit && (
+            <div className="error-message" style={{ marginBottom: '20px' }}>
+              {formErrors.submit}
+            </div>
+          )}
+          <div className="form-row">
+            <div className="form-group">
+              <label>گاہک کا موبائل نمبر</label>
+              <input
+                type="text"
+                name="customerPhone"
+                value={form.customerPhone}
+                onChange={handlePhoneChange}
+                onKeyDown={handleKeyDown}
+                placeholder="موبائل نمبر درج کریں"
+                className={formErrors.customerPhone ? 'error ltr' : 'ltr'}
+                dir="ltr"
+                required
+              />
+              {formErrors.customerPhone && (
+                <div className="error-message" style={{ 
+                  fontSize: '12px', 
+                  marginTop: '4px',
+                  color: '#dc3545',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <span style={{ fontSize: '14px' }}>⚠️</span>
+                  {formErrors.customerPhone}
                 </div>
-              ))}
+              )}
+              
+              {searchLoading && <div className="loader"></div>}
+              
+              {searchResults.length > 0 && (
+                <div className="search-dropdown">
+                  {searchResults.map((customer, index) => (
+                    <div
+                      key={customer._id}
+                      onClick={() => selectCustomer(customer)}
+                      style={{
+                        backgroundColor:
+                          index === highlightIndex ? "#f0f0f0" : "transparent",
+                      }}
+                    >
+                      {customer.name} - {customer.phone}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-          {/* No customer found */}
-          {!searchLoading &&
-            form.customerPhone.length > 0 &&
-            searchResults.length === 0 &&
-            form.customerId === "" && (
-              <div style={{ marginTop: "5px", color: "red" }}>
-                No customers found
-              </div>
-            )}
 
-          {form.customerName && (
-            <div style={{ marginTop: "5px", color: "green" }}>
-              {form.customerName}
+            <div className="form-group">
+              <label>منتخب گاہک</label>
+              <input
+                type="text"
+                value={form.customerName || "کوئی گاہک منتخب نہیں"}
+                readOnly
+                className={formErrors.customerId ? 'error' : ''}
+              />
+              {formErrors.customerId && (
+                <div className="error-message" style={{ 
+                  fontSize: '12px', 
+                  marginTop: '4px',
+                  color: '#dc3545',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <span style={{ fontSize: '14px' }}>⚠️</span>
+                  {formErrors.customerId}
+                </div>
+              )}
             </div>
-          )}
-          <br />
 
-          {/* Suit Details */}
-          {form.suitDetails.map((suit, sIndex) => (
-            <div key={sIndex} style={{ marginTop: "10px" }}>
-              <b>
-                Suit Type:{" "}
-                {suitTypes.find((s) => s._id === suit.suitType)?.name ||
-                  suit.suitType}
-              </b>
-              {suit.items.map((item, iIndex) => (
-                <div key={iIndex} style={{ marginLeft: "15px" }}>
-                  <b>{item.itemName}</b>
-                  {item.sizes.map((sz, szIndex) => (
-                    <div key={szIndex} style={{ marginLeft: "15px" }}>
-                      {sz.name}:{" "}
-                      <input
-                        type="number"
-                        value={sz.value}
-                        onChange={(e) =>
-                          handleOtherChange(e, sIndex, iIndex, szIndex)
-                        }
-                      />
+            <div className="form-group">
+              <label>ملازم منتخب کریں</label>
+              <select
+                name="assignedEmployee"
+                value={form.assignedEmployee}
+                onChange={handleFormChange}
+                className={formErrors.assignedEmployee ? 'error' : ''}
+                required
+              >
+                <option value="">-- منتخب کریں --</option>
+                {employees.map((emp) => (
+                  <option key={emp._id} value={emp._id}>
+                    {emp.name}
+                  </option>
+                ))}
+              </select>
+              {formErrors.assignedEmployee && (
+                <div className="error-message" style={{ 
+                  fontSize: '12px', 
+                  marginTop: '4px',
+                  color: '#dc3545',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <span style={{ fontSize: '14px' }}>⚠️</span>
+                  {formErrors.assignedEmployee}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {form.suitDetails.length > 0 && (
+            <div className="form-section">
+              <h4>سوٹ کی تفصیلات</h4>
+              {form.suitDetails.map((suit, suitIndex) => (
+                <div key={suitIndex} className="suit-type-card">
+                  <h5>
+                    {suitTypes.find((st) => st._id === suit.suitType)?.name}
+                  </h5>
+                  {suit.items.map((item, itemIndex) => (
+                    <div key={itemIndex} className="mb-20">
+                      <strong>{item.itemName}:</strong>
+                      <div className="form-row">
+                        {item.sizes.map((size, sizeIndex) => (
+                          <div key={sizeIndex} className="form-group">
+                            <label>{size.name}</label>
+                            <input
+                              type="number"
+                              value={size.value}
+                              readOnly
+                              style={{ backgroundColor: '#f8f9fa' }}
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
               ))}
             </div>
-          ))}
-          <br />
+          )}
 
-          <label>Assign to Employee (optional):</label>
-          <select
-            name="assignedEmployee"
-            value={form.assignedEmployee}
-            onChange={(e) => handleOtherChange(e)}
-          >
-            <option value="">-- Select --</option>
-            {employees.map((emp) => (
-              <option key={emp._id} value={emp._id}>
-                {emp.name}
-              </option>
-            ))}
-          </select>
-          <br />
-          <label>Notes:</label>
-          <textarea
-            name="notes"
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            rows={3}
-            style={{ width: "100%", padding: "5px" }}
-          ></textarea>
+          <div className="form-group">
+            <label>نوٹس</label>
+            <textarea
+              name="notes"
+              value={form.notes}
+              onChange={handleFormChange}
+              placeholder="آرڈر کے بارے میں نوٹس درج کریں (اختیاری)"
+              rows="3"
+              className={formErrors.notes ? 'error' : ''}
+            />
+            {formErrors.notes && (
+              <div className="error-message" style={{ 
+                fontSize: '12px', 
+                marginTop: '4px',
+                color: '#dc3545',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                <span style={{ fontSize: '14px' }}>⚠️</span>
+                {formErrors.notes}
+              </div>
+            )}
+          </div>
 
-          <br />
-          <button type="submit">{editingId ? "Update" : "Place"} Order</button>
+          <div className="action-buttons">
+            <button type="submit" className="primary">
+              {editingId ? "تبدیلیاں محفوظ کریں" : "آرڈر بنائیں"}
+            </button>
+            {editingId && (
+              <button 
+                type="button" 
+                onClick={() => {
+                  setEditingId(null);
+                  setForm({
+                    customerPhone: "",
+                    customerId: "",
+                    customerName: "",
+                    suitDetails: [],
+                    assignedEmployee: "",
+                    notes: "",
+                  });
+                  setFormErrors({});
+                }}
+                className="secondary"
+              >
+                منسوخ کریں
+              </button>
+            )}
+          </div>
         </form>
       </div>
 
-      {/* Table */}
       <div className="card">
-        <h3>All Orders</h3>
-        <table border="1" cellPadding="6" style={{ width: "100%" }}>
-          <thead>
-            <tr>
-              <th>Customer</th>
-              <th>Suit Details</th>
-              <th>Employee</th>
-              <th>Date</th>
-              <th>Notes</th>
-              <th>بٹن</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((o) => (
-              <tr key={o._id}>
-                <td>{o.customer?.name}</td>
-                <td>
-                  {o.suitDetails.map((s, i) => (
-                    <div key={i}>
-                      <b>
-                        {suitTypes.find((st) => st._id === s.suitType)?.name}
-                      </b>
-                      {s.items.map((it, j) => (
-                        <div key={j}>
-                          {it.itemName}:{" "}
-                          {it.sizes
-                            .map((sz) => `${sz.name}:${sz.value}`)
-                            .join(", ")}
+        <h3>آرڈرز کی فہرست</h3>
+        
+        {loading && orders.length === 0 ? (
+          <div className="text-center p-20">
+            <p>لوڈ ہو رہا ہے...</p>
+          </div>
+        ) : orders.length === 0 ? (
+          <div className="text-center p-20">
+            <p>کوئی آرڈر نہیں ملا</p>
+          </div>
+        ) : (
+          <div className="table-wrapper" dir="rtl">
+            <table dir="rtl">
+              <thead>
+                <tr>
+                  <th>گاہک</th>
+                  <th>موبائل</th>
+                  <th>ملازم</th>
+                  <th>سوٹ کی تفصیلات</th>
+                  <th>تاریخ</th>
+                  <th>نوٹس</th>
+                  <th>عملیات</th>
+                </tr>
+              </thead>
+              <tbody>
+              {orders.map((order) => (
+                <tr key={order._id}>
+                  <td>
+                    <strong>{order.customer?.name || order.customerName || "-"}</strong>
+                  </td>
+                  <td>{order.customer?.phone || order.customerPhone || "-"}</td>
+                  <td>
+                    {employees.find((emp) => emp._id === order.assignedEmployee)?.name || "-"}
+                  </td>
+                  <td>
+                    {order.suitDetails.map((suit, i) => (
+                      <div key={i} className="mb-20">
+                        <div className="status-badge status-pending">
+                          {suitTypes.find((st) => st._id === suit.suitType)?.name}
                         </div>
-                      ))}
+                        {suit.items.map((item, j) => (
+                          <div key={j} style={{ marginTop: '8px', fontSize: '13px' }}>
+                            <strong>{item.itemName}:</strong>{" "}
+                            {item.sizes
+                              .filter(sz => sz.value)
+                              .map((sz) => `${sz.name}: ${sz.value}`)
+                              .join(", ")}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </td>
+                  <td>
+                    {new Date(order.orderDate).toLocaleDateString('ur-PK')}
+                  </td>
+                  <td>
+                    {order.notes || "-"}
+                  </td>
+                  <td>
+                    <div className="action-buttons">
+                      <button 
+                        onClick={() => handleEdit(order)}
+                        className="secondary"
+                      >
+                        ترمیم
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(order._id)}
+                        className="danger"
+                      >
+                        حذف
+                      </button>
                     </div>
-                  ))}
-                </td>
-                <td>{o.assignedEmployee?.name || "-"}</td>
-                <td>{new Date(o.orderDate).toLocaleDateString()}</td>
-                <td>{o.notes}</td>
-                <td>
-                  <button onClick={() => handleEdit(o)}>ایڈیٹ</button>{" "}
-                  <button onClick={() => handleDelete(o._id)}>ڈیلیٹ</button>{" "}
-                  <button onClick={() => printSlip(o)}>پرنٹ</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </td>
+                </tr>
+              ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
