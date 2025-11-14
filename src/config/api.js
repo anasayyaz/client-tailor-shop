@@ -1,18 +1,21 @@
 // API Configuration
-// In production (combined deployment), use relative URLs
-// In development or separate deployment, use full URL from env
+// Production URL
+const PRODUCTION_API_URL = 'https://server-tailor-shop.onrender.com';
+
+// Local development URL (commented out - uncomment for local development)
+// const LOCAL_API_URL = 'http://localhost:5000';
+
 const getApiBaseUrl = () => {
+  // Use environment variable if set
   if (process.env.REACT_APP_API_URL) {
     return process.env.REACT_APP_API_URL;
   }
   
-  // If no env var and in production, use relative URL (same domain)
-  if (process.env.NODE_ENV === 'production') {
-    return '';
-  }
+  // Use production URL by default
+  return PRODUCTION_API_URL;
   
-  // Default to localhost for development
-  return 'http://localhost:5000';
+  // For local development, uncomment the line below and comment the line above
+  // return LOCAL_API_URL;
 };
 
 const API_BASE_URL = getApiBaseUrl();
