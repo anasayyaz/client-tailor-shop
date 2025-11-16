@@ -32,6 +32,8 @@ div, p, span, h1, h2, h3, h4, h5, h6, label, li, td, th {
   max-width: 1400px;
   margin: 0 auto;
   min-height: calc(100vh - 80px);
+  position: relative;
+  z-index: 1;
 }
 
 /* Enhanced Card Styling */
@@ -45,6 +47,7 @@ div, p, span, h1, h2, h3, h4, h5, h6, label, li, td, th {
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
+  z-index: 2;
 }
 
 .card:hover {
@@ -105,6 +108,7 @@ input, select, textarea {
   direction: rtl;
   text-align: right;
   font-family: inherit;
+  pointer-events: auto;
 }
 
 /* All inputs are RTL by default for Urdu text */

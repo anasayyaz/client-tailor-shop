@@ -192,11 +192,7 @@ function Orders() {
       isValid = false;
     }
 
-    // Validate assigned employee
-    if (!form.assignedEmployee) {
-      errors.assignedEmployee = "براہ کرم ملازم منتخب کریں";
-      isValid = false;
-    }
+    // Employee selection is optional
 
     // Validate notes (optional)
     if (form.notes) {
@@ -409,7 +405,6 @@ function Orders() {
                 value={form.assignedEmployee}
                 onChange={handleFormChange}
                 className={formErrors.assignedEmployee ? 'error' : ''}
-                required
               >
                 <option value="">-- منتخب کریں --</option>
                 {employees.map((emp) => (
