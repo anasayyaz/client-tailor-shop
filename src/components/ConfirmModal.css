@@ -7,9 +7,11 @@
   background-color: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
-  align-items: center;
-  z-index: 1000;
+  align-items: flex-start;
+  z-index: 2000;
   padding: 20px;
+  padding-top: 100px;
+  overflow-y: auto;
   animation: fadeIn 0.2s ease-in-out;
 }
 
@@ -28,11 +30,15 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   max-width: 500px;
   width: 100%;
-  max-height: 90vh;
+  max-height: calc(100vh - 120px);
   overflow-y: auto;
   animation: slideUp 0.3s ease-out;
   direction: rtl;
+  margin: auto;
+  position: relative;
 }
+
+/* Large modal variant - handled via inline styles */
 
 @keyframes slideUp {
   from {
@@ -130,9 +136,18 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+  .modal-overlay {
+    padding: 10px;
+    padding-top: 80px;
+    align-items: flex-start;
+  }
+
   .modal-content {
-    max-width: 95%;
-    margin: 10px;
+    max-width: 100% !important;
+    width: 100% !important;
+    max-height: calc(100vh - 100px);
+    margin: 0;
+    border-radius: 8px 8px 0 0;
   }
 
   .modal-header,
@@ -141,8 +156,54 @@
     padding: 16px;
   }
 
+  .modal-header {
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 10;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
   .modal-header h3 {
     font-size: 18px;
+  }
+
+  .modal-body {
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+  }
+  
+  .modal-body .form-row {
+    grid-template-columns: 1fr !important;
+    gap: 15px !important;
+  }
+  
+  .modal-body .flex {
+    flex-direction: column !important;
+  }
+  
+  .modal-body .flex > * {
+    width: 100% !important;
+    min-width: 100% !important;
+  }
+  
+  .modal-body .suit-type-card {
+    padding: 12px !important;
+  }
+  
+  .modal-body .suit-type-card > div[style*="display: flex"] {
+    flex-direction: column !important;
+  }
+  
+  .modal-body .suit-type-card > div[style*="display: flex"] > * {
+    width: 100% !important;
+    min-width: 100% !important;
+    margin-top: 10px !important;
+  }
+  
+  .modal-body .form-group {
+    min-width: 100% !important;
+    width: 100% !important;
   }
 
   .modal-body p {
@@ -151,10 +212,44 @@
 
   .modal-footer {
     flex-direction: column-reverse;
+    position: sticky;
+    bottom: 0;
+    background: white;
+    border-top: 1px solid #e0e0e0;
   }
 
   .modal-footer button {
     width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-overlay {
+    padding: 5px;
+    padding-top: 70px;
+  }
+
+  .modal-content {
+    max-height: calc(100vh - 80px);
+    border-radius: 8px;
+  }
+
+  .modal-header h3 {
+    font-size: 16px;
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 12px;
+  }
+  
+  .modal-body .suit-type-card {
+    padding: 10px !important;
+  }
+  
+  .modal-body .form-section {
+    padding: 12px !important;
   }
 }
 

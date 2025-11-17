@@ -36,9 +36,13 @@ function PrintOrder() {
   if (error) return <div style={{ padding: "20px", color: "red" }}>{error}</div>;
   if (!order) return <div>آرڈر نہیں ملا</div>;
 
+  const customerName = order.customer?.name || order.customerName || "—";
+  const customerPhone = order.customer?.phone || order.customerPhone || "—";
+  const customerSerial = order.customer?.serialNumber || order.customerSerial || "—";
+
   return (
     <div className="print-container" dir="rtl" style={{ textAlign: "right" }}>
-      <div className="print-header">
+      <div className="print-header bordered">
         <img src={logo} alt="Logo" className="print-logo" />
         <div className="shop-details">
           <h1>ال-انصاری درزی</h1>
@@ -48,47 +52,83 @@ function PrintOrder() {
         </div>
       </div>
 
-      <hr />
-
-      <div className="print-section">
-        <p><strong>گاہک:</strong> {order.customer?.name || order.customerName || "N/A"}</p>
-        <p><strong>فون:</strong> {order.customer?.phone || order.customerPhone || "N/A"}</p>
-        <p><strong>تاریخ:</strong> {new Date(order.orderDate).toLocaleDateString()}</p>
+      <div className="meta bordered">
+        <div className="meta-row">
+          <div><strong>سیریل نمبر:</strong> {customerSerial}</div>
+          <div><strong>تاریخ:</strong> {new Date(order.orderDate).toLocaleDateString('ur-PK')}</div>
+        </div>
+        <div className="meta-row">
+          <div><strong>نام:</strong> {customerName}</div>
+          <div><strong>فون:</strong> {customerPhone}</div>
+        </div>
       </div>
 
-      <div className="print-section">
-        <h2>آرڈر کی تفصیلات</h2>
-        {order.suitDetails.map((suit, i) => (
-          <div key={i} className="suit-block">
-            <h3>{suit.suitType?.name || "Suit"}</h3>
-            {suit.items.map((item, j) => (
-              <div key={j}>
-                <b>{item.itemName}</b>: {item.sizes.map(sz => `${sz.name}: ${sz.value}`).join(", ")}
+      {order.suitDetails.map((suit, i) => {
+        const shalwar =
+          suit.items.find(it => it.itemName?.includes('شلوار')) ||
+          suit.items.find(it => it.itemName?.toLowerCase?.().includes('shalwar'));
+        const kameez =
+          suit.items.find(it => it.itemName?.includes('قمیض')) ||
+          suit.items.find(it => it.itemName?.toLowerCase?.().includes('kameez'));
+        
+        // Helper function to get size type from suitType
+        const getSizeType = (itemName, sizeName) => {
+          if (!suit.suitType?.items) return null;
+          const suitTypeItem = suit.suitType.items.find(it => 
+            it.name === itemName || 
+            (itemName?.includes('قمیض') && it.name?.includes('قمیض')) ||
+            (itemName?.includes('شلوار') && it.name?.includes('شلوار'))
+          );
+          if (!suitTypeItem) return null;
+          const suitTypeSize = suitTypeItem.sizes?.find(s => s.name === sizeName);
+          return suitTypeSize?.type || null;
+        };
+
+        // Helper function to render size value
+        const renderSizeValue = (sz, itemName) => {
+          const sizeType = getSizeType(itemName, sz.name);
+          if (sizeType === 'checkbox') {
+            // For checkbox, show tick or cross in the value area
+            const isChecked = sz.value === true || sz.value === 'true';
+            return (
+              <div key={sz.name} className="size-row">
+                <span className="size-name">{sz.name}</span>
+                <span className="size-dots"></span>
+                <span className="size-value">{isChecked ? '✓' : '✗'}</span>
               </div>
-            ))}
+            );
+          } else {
+            // For other types, show value as before
+            return (
+              <div key={sz.name} className="size-row">
+                <span className="size-name">{sz.name}</span>
+                <span className="size-dots"></span>
+                <span className="size-value">{sz.value || "—"}</span>
+              </div>
+            );
+          }
+        };
+
+        return (
+          <div key={i} className="suit-card bordered">
+            <div className="suit-title">{suit.suitType?.name || "سوٹ"}</div>
+            <div className="two-col">
+              <div className="col">
+                <div className="item-name">{kameez?.itemName || 'قمیض'}</div>
+                <div className="sizes-grid">
+                  {(kameez?.sizes || []).map((sz, k) => renderSizeValue(sz, kameez?.itemName))}
+                </div>
+              </div>
+              <div className="col">
+                <div className="item-name">{shalwar?.itemName || 'شلوار'}</div>
+                <div className="sizes-grid">
+                  {(shalwar?.sizes || []).map((sz, k) => renderSizeValue(sz, shalwar?.itemName))}
+                </div>
+              </div>
+            </div>
           </div>
-        ))}
-      </div>
-
-      <div className="print-section">
-        <p><strong>کل آئٹمز:</strong> {order.suitDetails.reduce((total, s) => total + s.items.length, 0)}</p>
-        {order.assignedEmployee && (
-          <p><strong>تفویض شدہ درزی:</strong> {order.assignedEmployee.name}</p>
-        )}
-      </div>
-
-      <div className="print-signature">
-        <div className="signature-box">
-          <p>گاہک کا دستخط</p>
-        </div>
-        <div className="signature-box">
-          <p>درزی / مہر</p>
-        </div>
-      </div>
-
-      <div className="print-footer">
-        <p>ال-انصاری درزیوں کا انتخاب کرنے کے لیے شکریہ!</p>
-      </div>
+        );
+      })}
     </div>
   );
 }

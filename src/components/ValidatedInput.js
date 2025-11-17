@@ -85,7 +85,7 @@ const ValidatedInput = ({
         placeholder={placeholder}
         disabled={disabled}
         className={inputClassName}
-        dir="rtl"
+        dir={props.dir || "rtl"}
         {...props}
       />
       

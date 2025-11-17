@@ -9,6 +9,7 @@ import { API_ENDPOINTS } from "../config/api";
 function Employees() {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const [form, setForm] = useState({ name: "", phone: "", cnic: "" });
   const [formErrors, setFormErrors] = useState({});
   const [expenseForm, setExpenseForm] = useState({
@@ -18,27 +19,18 @@ function Employees() {
     date: new Date().toISOString().slice(0, 10),
   });
   const [expenseFormErrors, setExpenseFormErrors] = useState({});
-  const [selectedEmployeeForOrders, setSelectedEmployeeForOrders] = useState("");
-  const [orderFilter, setOrderFilter] = useState({ startDate: "", endDate: "" });
-  const [allOrders, setAllOrders] = useState([]);
   const [filter, setFilter] = useState({ startDate: "", endDate: "", search: "" });
   const [editingId, setEditingId] = useState(null);
+  const [formModal, setFormModal] = useState({ isOpen: false });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
+  const [employeeReportModal, setEmployeeReportModal] = useState({ isOpen: false, employee: null });
+  const [quickExpenseModal, setQuickExpenseModal] = useState({ isOpen: false, employeeId: null, employeeName: "" });
+  const [expenseReportModal, setExpenseReportModal] = useState({ isOpen: false });
 
   useEffect(() => {
     fetchEmployees();
-    fetchOrders();
   }, []);
 
-  const fetchOrders = async () => {
-    try {
-      const res = await axios.get(API_ENDPOINTS.ORDERS);
-      setAllOrders(res.data || []);
-    } catch (err) {
-      console.error("Error fetching orders:", err);
-      setAllOrders([]);
-    }
-  };
 
   const fetchEmployees = async () => {
     try {
@@ -136,6 +128,7 @@ function Employees() {
       }
       setForm({ name: "", phone: "", cnic: "" });
       setFormErrors({});
+      setFormModal({ isOpen: false });
       await fetchEmployees();
       toast.success(isEditing ? "ملازم کی معلومات کامیابی سے اپ ڈیٹ ہو گئیں" : "ملازم کامیابی سے شامل ہو گیا");
     } catch (error) {
@@ -151,6 +144,21 @@ function Employees() {
   const handleEdit = (emp) => {
     setForm({ name: emp.name, phone: emp.phone, cnic: emp.cnic });
     setEditingId(emp._id);
+    setFormErrors({});
+    setFormModal({ isOpen: true });
+  };
+
+  const openAddModal = () => {
+    setForm({ name: "", phone: "", cnic: "" });
+    setEditingId(null);
+    setFormErrors({});
+    setFormModal({ isOpen: true });
+  };
+
+  const closeFormModal = () => {
+    setFormModal({ isOpen: false });
+    setForm({ name: "", phone: "", cnic: "" });
+    setEditingId(null);
     setFormErrors({});
   };
 
@@ -189,6 +197,7 @@ function Employees() {
         description: expenseForm.description,
         date: expenseForm.date,
       });
+      const wasQuickExpense = quickExpenseModal.isOpen;
       setExpenseForm({
         employeeId: "",
         amount: "",
@@ -198,6 +207,10 @@ function Employees() {
       setExpenseFormErrors({});
       await fetchEmployees();
       toast.success("خرچ کامیابی سے شامل ہو گیا");
+      if (wasQuickExpense) {
+        setQuickExpenseModal({ isOpen: false, employeeId: null, employeeName: "" });
+      }
+      // Don't close expense report modal automatically - user might want to add more expenses
     } catch (error) {
       console.error("Error adding expense:", error);
       const errorMessage = error.response?.data?.message || "خرچ شامل کرنے میں مسئلہ ہوا ہے۔ براہ کرم دوبارہ کوشش کریں۔";
@@ -206,6 +219,48 @@ function Employees() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const openQuickExpense = (emp) => {
+    setQuickExpenseModal({ isOpen: true, employeeId: emp._id, employeeName: emp.name });
+    setExpenseForm({
+      employeeId: emp._id,
+      amount: "",
+      description: "",
+      date: new Date().toISOString().slice(0, 10),
+    });
+    setExpenseFormErrors({});
+  };
+
+  const openEmployeeReport = async (emp) => {
+    // Refresh employee data to get latest expenses
+    try {
+      const res = await axios.get(API_ENDPOINTS.EMPLOYEES);
+      const updatedEmployee = res.data.find(e => e._id === emp._id);
+      if (updatedEmployee) {
+        setEmployeeReportModal({ isOpen: true, employee: updatedEmployee });
+      } else {
+        setEmployeeReportModal({ isOpen: true, employee: emp });
+      }
+    } catch (err) {
+      console.error("Error fetching employee data:", err);
+      setEmployeeReportModal({ isOpen: true, employee: emp });
+    }
+  };
+
+  const closeEmployeeReport = () => {
+    setEmployeeReportModal({ isOpen: false, employee: null });
+  };
+
+  const closeQuickExpense = () => {
+    setQuickExpenseModal({ isOpen: false, employeeId: null, employeeName: "" });
+    setExpenseForm({
+      employeeId: "",
+      amount: "",
+      description: "",
+      date: new Date().toISOString().slice(0, 10),
+    });
+    setExpenseFormErrors({});
   };
 
   const filterExpenses = (expenses) => {
@@ -218,25 +273,12 @@ function Employees() {
     });
   };
 
-  const filterOrders = () => {
-    if (!selectedEmployeeForOrders) return [];
-    return allOrders.filter((order) => {
-      if (!order.assignedEmployee || order.assignedEmployee._id !== selectedEmployeeForOrders)
-        return false;
-      const orderDateStr = new Date(order.orderDate).toISOString().slice(0, 10);
-      const startDateStr = orderFilter.startDate;
-      const endDateStr = orderFilter.endDate;
-      return (
-        (!startDateStr || orderDateStr >= startDateStr) &&
-        (!endDateStr || orderDateStr <= endDateStr)
-      );
-    });
-  };
 
   const filteredEmployees = employees.filter(
     (e) =>
-      e.name.toLowerCase().includes(filter.search.toLowerCase()) ||
-      e.phone.includes(filter.search)
+      e.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      e.phone?.includes(searchTerm) ||
+      e.cnic?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -250,297 +292,485 @@ function Employees() {
         confirmText="حذف کریں"
         cancelText="منسوخ کریں"
       />
-      <h2 style={{ direction: 'rtl', textAlign: 'right' }}>ملازمین کا انتظام</h2>
 
-      <div className="card">
-        <h3>{editingId ? "ملازم میں ترمیم کریں" : "نیا ملازم شامل کریں"}</h3>
-        
-        <form onSubmit={handleSubmit}>
-          {formErrors.submit && (
-            <div className="error-message" style={{ marginBottom: '20px' }}>
-              {formErrors.submit}
+      {/* Quick Expense Modal */}
+      {quickExpenseModal.isOpen && (
+        <div className="modal-overlay" onClick={closeQuickExpense}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>خرچ شامل کریں - {quickExpenseModal.employeeName}</h3>
+              <button className="modal-close" onClick={closeQuickExpense}>×</button>
             </div>
-          )}
-          <div className="form-row">
-            <ValidatedInput
-              fieldType="employeeName"
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              placeholder="ملازم کا نام درج کریں"
-              label="نام"
-              required
-            />
-            
-            <ValidatedInput
-              fieldType="phone"
-              name="phone"
-              value={form.phone}
-              onChange={handleChange}
-              placeholder="موبائل نمبر درج کریں"
-              label="موبائل"
-              required
-            />
-            
-            <ValidatedInput
-              fieldType="serialNumber"
-              name="cnic"
-              value={form.cnic}
-              onChange={handleChange}
-              placeholder="شناختی کارڈ نمبر درج کریں"
-              label="شناختی کارڈ نمبر"
-            />
-          </div>
-
-          <div className="action-buttons">
-            <button type="submit" className="primary">
-              {editingId ? "تبدیلیاں محفوظ کریں" : "ملازم شامل کریں"}
-            </button>
-            {editingId && (
-              <button 
-                type="button" 
-                onClick={() => {
-                  setEditingId(null);
-                  setForm({ name: "", phone: "", cnic: "" });
-                  setFormErrors({});
-                }}
-                className="secondary"
-              >
-                منسوخ کریں
-              </button>
-            )}
-          </div>
-        </form>
-
-        <div className="form-section">
-          <h3>خرچ شامل کریں</h3>
-          
-          <form onSubmit={addExpense}>
-            {expenseFormErrors.submit && (
-              <div className="error-message" style={{ marginBottom: '20px' }}>
-                {expenseFormErrors.submit}
-              </div>
-            )}
-            <div className="form-row">
-              <div className="form-group">
-                <label>ملازم منتخب کریں</label>
-                <select 
-                  name="employeeId" 
-                  value={expenseForm.employeeId} 
-                  onChange={handleExpenseChange}
-                  className={expenseFormErrors.employeeId ? 'error' : ''}
-                >
-                  <option value="">-- منتخب کریں --</option>
-                  {employees.map((e) => (
-                    <option key={e._id} value={e._id}>{e.name}</option>
-                  ))}
-                </select>
-                {expenseFormErrors.employeeId && (
-                  <div className="error-message" style={{ 
-                    fontSize: '12px', 
-                    marginTop: '4px',
-                    color: '#dc3545',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}>
-                    <span style={{ fontSize: '14px' }}>⚠️</span>
-                    {expenseFormErrors.employeeId}
+            <div className="modal-body">
+              <form onSubmit={addExpense}>
+                {expenseFormErrors.submit && (
+                  <div className="error-message" style={{ marginBottom: '20px' }}>
+                    {expenseFormErrors.submit}
                   </div>
+                )}
+                <div className="form-row">
+                  <ValidatedInput
+                    fieldType="expenseAmount"
+                    type="text"
+                    name="amount"
+                    value={expenseForm.amount}
+                    onChange={handleExpenseChange}
+                    placeholder="رقم درج کریں"
+                    label="رقم"
+                    required
+                  />
+
+                  <ValidatedInput
+                    fieldType="expenseDescription"
+                    name="description"
+                    value={expenseForm.description}
+                    onChange={handleExpenseChange}
+                    placeholder="خرچ کی تفصیل درج کریں"
+                    label="تفصیل"
+                    required
+                  />
+
+                  <div className="form-group">
+                    <label>تاریخ</label>
+                    <input 
+                      type="date" 
+                      name="date" 
+                      value={expenseForm.date} 
+                      onChange={handleExpenseChange}
+                    />
+                  </div>
+                </div>
+
+                <div className="action-buttons">
+                  <button type="submit" className="primary">
+                    خرچ شامل کریں
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={closeQuickExpense}
+                    className="secondary"
+                  >
+                    منسوخ کریں
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Employee Report Modal */}
+      {employeeReportModal.isOpen && employeeReportModal.employee && (
+        <div className="modal-overlay" onClick={closeEmployeeReport}>
+          <div className="modal-content" style={{ maxWidth: '900px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>ملازم رپورٹ - {employeeReportModal.employee.name}</h3>
+              <button className="modal-close" onClick={closeEmployeeReport}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: '30px' }}>
+                <h4>ملازم کی معلومات</h4>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>نام</label>
+                    <input type="text" value={employeeReportModal.employee.name} disabled style={{ background: '#f5f5f5' }} />
+                  </div>
+                  <div className="form-group">
+                    <label>موبائل</label>
+                    <input type="text" value={employeeReportModal.employee.phone} disabled style={{ background: '#f5f5f5' }} />
+                  </div>
+                  <div className="form-group">
+                    <label>شناختی کارڈ</label>
+                    <input type="text" value={employeeReportModal.employee.cnic || "-"} disabled style={{ background: '#f5f5f5' }} />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '30px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h4>خرچ کی تفصیلات</h4>
+                  <button 
+                    onClick={() => {
+                      closeEmployeeReport();
+                      openQuickExpense(employeeReportModal.employee);
+                    }}
+                    className="success"
+                  >
+                    + نیا خرچ شامل کریں
+                  </button>
+                </div>
+                
+                {employeeReportModal.employee.expenses && employeeReportModal.employee.expenses.length > 0 ? (
+                  <div className="table-wrapper">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>تاریخ</th>
+                          <th>رقم</th>
+                          <th>تفصیل</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {employeeReportModal.employee.expenses.map((ex, i) => (
+                          <tr key={i}>
+                            <td>{new Date(ex.date).toLocaleDateString('ur-PK')}</td>
+                            <td><strong>روپے {ex.amount.toLocaleString()}</strong></td>
+                            <td>{ex.description}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan="2"><strong>کل خرچ:</strong></td>
+                          <td><strong>روپے {employeeReportModal.employee.expenses.reduce((acc, ex) => acc + ex.amount, 0).toLocaleString()}</strong></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : (
+                  <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>کوئی خرچ نہیں ملا</p>
                 )}
               </div>
 
-              <ValidatedInput
-                fieldType="expenseAmount"
-                type="number"
-                name="amount"
-                value={expenseForm.amount}
-                onChange={handleExpenseChange}
-                placeholder="رقم درج کریں"
-                label="رقم"
-                required
-              />
-
-              <ValidatedInput
-                fieldType="expenseDescription"
-                name="description"
-                value={expenseForm.description}
-                onChange={handleExpenseChange}
-                placeholder="خرچ کی تفصیل درج کریں"
-                label="تفصیل"
-                required
-              />
-
-              <div className="form-group">
-                <label>تاریخ</label>
-                <input 
-                  type="date" 
-                  name="date" 
-                  value={expenseForm.date} 
-                  onChange={handleExpenseChange}
-                />
+              <div className="action-buttons">
+                <button 
+                  onClick={() => {
+                    closeEmployeeReport();
+                    openQuickExpense(employeeReportModal.employee);
+                  }}
+                  className="primary"
+                >
+                  خرچ شامل کریں
+                </button>
+                <button 
+                  onClick={closeEmployeeReport}
+                  className="secondary"
+                >
+                  بند کریں
+                </button>
               </div>
             </div>
-
-            <div className="action-buttons">
-              <button type="submit" className="primary">
-                خرچ شامل کریں
-              </button>
+          </div>
+        </div>
+      )}
+      {/* Form Modal */}
+      {formModal.isOpen && (
+        <div className="modal-overlay" onClick={closeFormModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{editingId ? "ملازم میں ترمیم کریں" : "نیا ملازم شامل کریں"}</h3>
+              <button className="modal-close" onClick={closeFormModal}>×</button>
             </div>
-          </form>
+            <div className="modal-body">
+              <form onSubmit={handleSubmit}>
+                {formErrors.submit && (
+                  <div className="error-message" style={{ marginBottom: '20px' }}>
+                    {formErrors.submit}
+                  </div>
+                )}
+                <div className="form-row">
+                  <ValidatedInput
+                    fieldType="employeeName"
+                    name="name"
+                    value={form.name}
+                    onChange={handleChange}
+                    placeholder="ملازم کا نام درج کریں"
+                    label="نام"
+                    required
+                  />
+                  
+                  <ValidatedInput
+                    fieldType="phone"
+                    name="phone"
+                    value={form.phone}
+                    onChange={handleChange}
+                    placeholder="موبائل نمبر درج کریں"
+                    label="موبائل"
+                    required
+                  />
+                  
+                  <ValidatedInput
+                    fieldType="serialNumber"
+                    name="cnic"
+                    value={form.cnic}
+                    onChange={handleChange}
+                    placeholder="شناختی کارڈ نمبر درج کریں"
+                    label="شناختی کارڈ نمبر"
+                  />
+                </div>
+
+                <div className="action-buttons">
+                  <button type="submit" className="primary">
+                    {editingId ? "تبدیلیاں محفوظ کریں" : "ملازم شامل کریں"}
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={closeFormModal}
+                    className="secondary"
+                  >
+                    منسوخ کریں
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <h2 style={{ direction: 'rtl', textAlign: 'right' }}>ملازمین کا انتظام</h2>
+
+      {/* Search and Add Button */}
+      <div className="card" style={{ marginBottom: '20px' }}>
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <input
+              type="text"
+              placeholder="نام، موبائل یا شناختی کارڈ نمبر سے تلاش کریں..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                fontSize: '14px',
+                border: '1px solid #ddd',
+                borderRadius: '4px'
+              }}
+            />
+          </div>
+          <button 
+            onClick={() => setExpenseReportModal({ isOpen: true })}
+            className="success"
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            📊 خرچ کی تفصیلی رپورٹ
+          </button>
+          <button 
+            onClick={openAddModal}
+            className="primary"
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            + نیا ملازم شامل کریں
+          </button>
         </div>
       </div>
 
+      {/* Employees List */}
       <div className="card">
-        <h3>ملازمین تلاش کریں</h3>
+        <h3>ملازمین کی فہرست</h3>
         
-        <div className="form-row">
-          <div className="form-group">
-            <label>تلاش</label>
-            <input
-              type="text"
-              placeholder="نام یا موبائل نمبر تلاش کریں..."
-              name="search"
-              value={filter.search}
-              onChange={handleFilterChange}
-            />
-          </div>
-          
-          <div className="form-group">
-            <label>شروع کی تاریخ</label>
-            <input 
-              type="date" 
-              name="startDate" 
-              value={filter.startDate} 
-              onChange={handleFilterChange} 
-            />
-          </div>
-          
-          <div className="form-group">
-            <label>اختتامی تاریخ</label>
-            <input 
-              type="date" 
-              name="endDate" 
-              value={filter.endDate} 
-              onChange={handleFilterChange} 
-            />
-          </div>
-        </div>
-
-        {filteredEmployees.length === 0 ? (
+        {loading && employees.length === 0 ? (
           <div className="text-center p-20">
-            <p>کوئی ملازم نہیں ملا</p>
+            <p>لوڈ ہو رہا ہے...</p>
+          </div>
+        ) : filteredEmployees.length === 0 ? (
+          <div className="text-center p-20">
+            <p>{searchTerm ? "تلاش کے نتائج نہیں ملے" : "کوئی ملازم نہیں ملا"}</p>
           </div>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>نام</th>
-                <th>موبائل</th>
-                <th>شناختی کارڈ</th>
-                <th>کل خرچ</th>
-                <th>تفصیلات</th>
-                <th>عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredEmployees.map((emp) => {
-                const expenses = filterExpenses(emp.expenses || []);
-                const totalExpense = expenses.reduce((acc, ex) => acc + ex.amount, 0);
+          <div className="table-wrapper" dir="rtl">
+            <table dir="rtl">
+              <thead>
+                <tr>
+                  <th>نام</th>
+                  <th>موبائل</th>
+                  <th>شناختی کارڈ</th>
+                  <th>کل خرچ</th>
+                  <th>تفصیلات</th>
+                  <th>عملیات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredEmployees.map((emp) => {
+                  const expenses = filterExpenses(emp.expenses || []);
+                  const totalExpense = expenses.reduce((acc, ex) => acc + ex.amount, 0);
 
-                return (
-                  <tr key={emp._id}>
-                    <td>
-                      <strong>{emp.name}</strong>
-                    </td>
-                    <td>{emp.phone}</td>
-                    <td>{emp.cnic || "-"}</td>
-                    <td>
-                      <strong>روپے {totalExpense.toLocaleString()}</strong>
-                    </td>
-                    <td>
-                      {expenses.map((ex, i) => (
-                        <div key={i} className="mb-20">
-                          <div className="status-badge status-pending">
-                            روپے {ex.amount.toLocaleString()}
+                  return (
+                    <tr key={emp._id}>
+                      <td>
+                        <strong>{emp.name}</strong>
+                      </td>
+                      <td>{emp.phone}</td>
+                      <td>{emp.cnic || "-"}</td>
+                      <td>
+                        <strong>روپے {totalExpense.toLocaleString()}</strong>
+                      </td>
+                      <td>
+                        {expenses.map((ex, i) => (
+                          <div key={i} className="mb-20">
+                            <div className="status-badge status-pending">
+                              روپے {ex.amount.toLocaleString()}
+                            </div>
+                            <div style={{ marginTop: '8px', fontSize: '13px' }}>
+                              <strong>تفصیل:</strong> {ex.description}
+                              <br />
+                              <strong>تاریخ:</strong> {new Date(ex.date).toLocaleDateString('ur-PK')}
+                            </div>
                           </div>
-                          <div style={{ marginTop: '8px', fontSize: '13px' }}>
-                            <strong>تفصیل:</strong> {ex.description}
-                            <br />
-                            <strong>تاریخ:</strong> {new Date(ex.date).toLocaleDateString('ur-PK')}
-                          </div>
+                        ))}
+                      </td>
+                      <td>
+                        <div className="action-buttons" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <button 
+                            onClick={() => openQuickExpense(emp)}
+                            className="success"
+                            title="خرچ شامل کریں"
+                            style={{ fontSize: '18px', padding: '8px 12px' }}
+                          >
+                            💰
+                          </button>
+                          <button 
+                            onClick={() => openEmployeeReport(emp)}
+                            className="primary"
+                            title="رپورٹ دیکھیں"
+                            style={{ fontSize: '18px', padding: '8px 12px' }}
+                          >
+                            📊
+                          </button>
+                          <button 
+                            onClick={() => handleEdit(emp)}
+                            className="secondary"
+                            title="ترمیم"
+                            style={{ fontSize: '18px', padding: '8px 12px' }}
+                          >
+                            ✏️
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(emp._id)}
+                            className="danger"
+                            title="حذف"
+                            style={{ fontSize: '18px', padding: '8px 12px' }}
+                          >
+                            🗑️
+                          </button>
                         </div>
-                      ))}
-                    </td>
-                    <td>
-                      <div className="action-buttons">
-                        <button 
-                          onClick={() => handleEdit(emp)}
-                          className="secondary"
-                        >
-                          ترمیم
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(emp._id)}
-                          className="danger"
-                        >
-                          حذف
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      <div className="card">
-        <h3>ملازم آرڈر رپورٹ</h3>
-        <label>ملازم منتخب کریں:</label>
-        <select value={selectedEmployeeForOrders} onChange={(e) => setSelectedEmployeeForOrders(e.target.value)}>
-          <option value="">-- ملازم منتخب کریں --</option>
-          {employees.map((e) => (
-            <option key={e._id} value={e._id}>{e.name}</option>
-          ))}
-        </select>
-        <br />
-        <label>شروع کی تاریخ:</label>
-        <input type="date" value={orderFilter.startDate} onChange={(e) => setOrderFilter({ ...orderFilter, startDate: e.target.value })} />
-        <label>اختتامی تاریخ:</label>
-        <input type="date" value={orderFilter.endDate} onChange={(e) => setOrderFilter({ ...orderFilter, endDate: e.target.value })} />
+      {/* Expense Report Modal */}
+      {expenseReportModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setExpenseReportModal({ isOpen: false })}>
+          <div className="modal-content" style={{ maxWidth: '1000px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>خرچ کی تفصیلی رپورٹ</h3>
+              <button className="modal-close" onClick={() => setExpenseReportModal({ isOpen: false })}>×</button>
+            </div>
+            <div className="modal-body">
+              {/* Date Filter for Expenses */}
+              <div style={{ marginBottom: '30px' }}>
+                <h4>خرچ کی تاریخ سے فلٹر</h4>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>شروع کی تاریخ</label>
+                    <input 
+                      type="date" 
+                      name="startDate" 
+                      value={filter.startDate} 
+                      onChange={handleFilterChange} 
+                    />
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>اختتامی تاریخ</label>
+                    <input 
+                      type="date" 
+                      name="endDate" 
+                      value={filter.endDate} 
+                      onChange={handleFilterChange} 
+                    />
+                  </div>
+                </div>
+              </div>
 
-        <table border="1" cellPadding="6" style={{ width: "100%", marginTop: "20px" }}>
-          <thead>
-            <tr>
-              <th>گاہک</th>
-              <th>سوٹ کی تفصیل</th>
-              <th>تاریخ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filterOrders().map((order) => (
-              <tr key={order._id}>
-                <td>{order.customer?.name}</td>
-                <td>
-                  {order.suitDetails.map((s, i) => (
-                    <div key={i}>
-                      <b>{s.suitType?.name}</b>
-                      {s.items.map((it, j) => (
-                        <div key={j}>
-                          {it.itemName}: {it.sizes.map((sz) => `${sz.name}:${sz.value}`).join(", ")}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </td>
-                <td>{new Date(order.orderDate).toLocaleDateString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+              {/* Detailed Expense Report Table */}
+              <div>
+                <h4>تمام ملازمین کے خرچ</h4>
+                {employees.length === 0 ? (
+                  <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>کوئی ملازم نہیں ملا</p>
+                ) : (
+                  <div className="table-wrapper" dir="rtl">
+                    <table dir="rtl">
+                      <thead>
+                        <tr>
+                          <th>ملازم کا نام</th>
+                          <th>موبائل</th>
+                          <th>خرچ کی تفصیلات</th>
+                          <th>کل خرچ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {employees.map((emp) => {
+                          const expenses = filterExpenses(emp.expenses || []);
+                          const totalExpense = expenses.reduce((acc, ex) => acc + ex.amount, 0);
+                          
+                          return (
+                            <tr key={emp._id}>
+                              <td><strong>{emp.name}</strong></td>
+                              <td>{emp.phone}</td>
+                              <td>
+                                {expenses.length > 0 ? (
+                                  <div>
+                                    {expenses.map((ex, i) => (
+                                      <div key={i} style={{ marginBottom: '10px', padding: '8px', background: '#f8f9fa', borderRadius: '4px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                          <strong>روپے {ex.amount.toLocaleString()}</strong>
+                                          <span style={{ fontSize: '12px', color: '#666' }}>
+                                            {new Date(ex.date).toLocaleDateString('ur-PK')}
+                                          </span>
+                                        </div>
+                                        <div style={{ fontSize: '13px', color: '#555' }}>
+                                          {ex.description}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span style={{ color: '#999' }}>کوئی خرچ نہیں</span>
+                                )}
+                              </td>
+                              <td>
+                                <strong style={{ color: '#800000', fontSize: '16px' }}>
+                                  روپے {totalExpense.toLocaleString()}
+                                </strong>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ background: '#f8f9fa', fontWeight: 'bold' }}>
+                          <td colSpan="3" style={{ textAlign: 'right' }}>کل خرچ:</td>
+                          <td style={{ color: '#800000', fontSize: '18px' }}>
+                            روپے {employees.reduce((total, emp) => {
+                              const expenses = filterExpenses(emp.expenses || []);
+                              return total + expenses.reduce((acc, ex) => acc + ex.amount, 0);
+                            }, 0).toLocaleString()}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button 
+                onClick={() => setExpenseReportModal({ isOpen: false })}
+                className="secondary"
+              >
+                بند کریں
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -26,6 +26,8 @@ function Orders() {
   });
 
   const [editingId, setEditingId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [formModal, setFormModal] = useState({ isOpen: false });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
 
   const typingTimeout = useRef(null);
@@ -114,19 +116,30 @@ function Orders() {
         searchAbortController.current = new AbortController();
         setSearchLoading(true);
         try {
-          const res = await axios.get(API_ENDPOINTS.CUSTOMERS, {
+          // Query backend by phone instead of fetching all customers
+          const res = await axios.get(`${API_ENDPOINTS.CUSTOMERS}/phone/${value}`, {
             signal: searchAbortController.current.signal
           });
-          const allCustomers = res.data;
-          const matches = allCustomers.filter((c) => 
-            c.phone && c.phone.startsWith(value)
-          );
-          setSearchResults(matches);
+          // If found, show a single result list to select from
+          if (res.data) {
+            setSearchResults([res.data]);
+            // Auto-select when exact phone matches to fill fields immediately
+            if (res.data.phone === value) {
+              selectCustomer(res.data);
+            }
+          } else {
+            setSearchResults([]);
+          }
         } catch (err) {
           // Ignore abort errors
           if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
-            console.error("Error searching customers:", err);
-            setSearchResults([]);
+            if (err.response && err.response.status === 404) {
+              // Not found for this phone input
+              setSearchResults([]);
+            } else {
+              console.error("Error searching customers:", err);
+              setSearchResults([]);
+            }
           }
         } finally {
           setSearchLoading(false);
@@ -139,22 +152,61 @@ function Orders() {
   };
 
   const selectCustomer = (customer) => {
+    // Get suit types to access size type information
+    const suitTypeMap = new Map();
+    suitTypes.forEach(st => suitTypeMap.set(st._id, st));
+    
     setForm({
       ...form,
       customerPhone: customer.phone,
       customerId: customer._id,
       customerName: customer.name,
-      suitDetails: customer.suits.map((suit) => ({
-        suitType:
-          typeof suit.suitType === "object" ? suit.suitType._id : suit.suitType,
-        items: suit.items.map((item) => ({
-          itemName: item.itemName,
-          sizes: item.sizes.map((size) => ({
-            name: size.name,
-            value: size.value,
-          })),
-        })),
-      })),
+      suitDetails: customer.suits.map((suit) => {
+        const suitTypeId = typeof suit.suitType === "object" ? suit.suitType._id : suit.suitType;
+        const suitTypeObj = typeof suit.suitType === "object" ? suit.suitType : suitTypeMap.get(suitTypeId);
+        
+        return {
+          suitType: suitTypeId,
+          items: suitTypeObj?.items?.map((suitTypeItem) => {
+            // Use suit type items as the source of truth to ensure all sizes are included
+            const customerItem = suit.items?.find(it => it.itemName === suitTypeItem.name);
+            
+            return {
+              itemName: suitTypeItem.name,
+              sizes: suitTypeItem.sizes.map((suitTypeSize) => {
+                // Find matching size in customer data to get existing value
+                const customerSize = customerItem?.sizes?.find(s => s.name === suitTypeSize.name);
+                
+                return {
+                  name: suitTypeSize.name,
+                  type: suitTypeSize.type || "text",
+                  value: customerSize?.value !== undefined && customerSize?.value !== null 
+                    ? customerSize.value 
+                    : (suitTypeSize.type === "checkbox" ? false : ""),
+                  options: suitTypeSize.options || []
+                };
+              }),
+            };
+          }) || suit.items.map((item) => {
+            // Fallback if suit type not found
+            const suitTypeItem = suitTypeObj?.items?.find(it => it.name === item.itemName);
+            
+            return {
+              itemName: item.itemName,
+              sizes: item.sizes.map((size) => {
+                const suitTypeSize = suitTypeItem?.sizes?.find(s => s.name === size.name);
+                
+                return {
+                  name: size.name,
+                  type: suitTypeSize?.type || "text",
+                  value: size.value !== null && size.value !== undefined ? size.value : "",
+                  options: suitTypeSize?.options || []
+                };
+              }),
+            };
+          }),
+        };
+      }),
     });
     setSearchResults([]);
     setHighlightIndex(-1);
@@ -239,6 +291,7 @@ function Orders() {
       });
       setFormErrors({});
       setSearchResults([]);
+      setFormModal({ isOpen: false });
       await fetchOrders();
       toast.success(isEditing ? "آرڈر کی معلومات کامیابی سے اپ ڈیٹ ہو گئیں" : "آرڈر کامیابی سے بنایا گیا");
     } catch (error) {
@@ -251,23 +304,191 @@ function Orders() {
     }
   };
 
-  const handleEdit = (order) => {
+  const handleEdit = async (order) => {
     // Handle both populated and non-populated customer data
     const customerId = order.customer?._id || order.customer || order.customerId || "";
-    const customerName = order.customer?.name || order.customerName || "";
-    const customerPhone = order.customer?.phone || order.customerPhone || "";
+    let customerName = order.customer?.name || order.customerName || "";
+    let customerPhone = order.customer?.phone || order.customerPhone || "";
     
-    setForm({
-      customerPhone: customerPhone,
+    // Fetch full customer data to get suit details with proper size types
+    let customerData = null;
+    if (customerId) {
+      try {
+        const res = await axios.get(`${API_ENDPOINTS.CUSTOMERS}/${customerId}`);
+        customerData = res.data;
+        // Update name and phone from fetched customer data if available
+        if (customerData) {
+          customerName = customerData.name || customerName;
+          customerPhone = customerData.phone || customerPhone;
+        }
+      } catch (err) {
+        console.error("Error fetching customer data:", err);
+        // Fall back to order data if customer fetch fails
+      }
+    }
+    
+    // Use customer data if available, otherwise use order suitDetails
+    let suitDetailsToUse = order.suitDetails || [];
+    if (customerData && customerData.suits && customerData.suits.length > 0) {
+      // Get suit types to access size type information
+      const suitTypeMap = new Map();
+      suitTypes.forEach(st => suitTypeMap.set(st._id, st));
+      
+      suitDetailsToUse = customerData.suits.map((suit) => {
+        const suitTypeId = typeof suit.suitType === "object" ? suit.suitType._id : suit.suitType;
+        const suitTypeObj = typeof suit.suitType === "object" ? suit.suitType : suitTypeMap.get(suitTypeId);
+        
+        return {
+          suitType: suitTypeId,
+          items: suitTypeObj?.items?.map((suitTypeItem) => {
+            // Use suit type items as the source of truth to ensure all sizes are included
+            const customerItem = suit.items?.find(it => it.itemName === suitTypeItem.name);
+            
+            // Try to find matching value from order suitDetails
+            const orderSuit = order.suitDetails?.find(sd => {
+              const sdSuitTypeId = typeof sd.suitType === "object" ? sd.suitType._id : sd.suitType;
+              return sdSuitTypeId === suitTypeId;
+            });
+            const orderItem = orderSuit?.items?.find(it => it.itemName === suitTypeItem.name);
+            
+            return {
+              itemName: suitTypeItem.name,
+              sizes: suitTypeItem.sizes.map((suitTypeSize) => {
+                // Find matching size in customer data to get existing value
+                const customerSize = customerItem?.sizes?.find(s => s.name === suitTypeSize.name);
+                // Find matching size in order data to get order value
+                const orderSize = orderItem?.sizes?.find(s => s.name === suitTypeSize.name);
+                
+                return {
+                  name: suitTypeSize.name,
+                  type: suitTypeSize.type || "text",
+                  value: orderSize?.value !== undefined && orderSize?.value !== null 
+                    ? orderSize.value 
+                    : (customerSize?.value !== undefined && customerSize?.value !== null 
+                      ? customerSize.value 
+                      : (suitTypeSize.type === "checkbox" ? false : "")),
+                  options: suitTypeSize.options || []
+                };
+              }),
+            };
+          }) || suit.items.map((item) => {
+            // Fallback if suit type not found
+            const suitTypeItem = suitTypeObj?.items?.find(it => it.name === item.itemName);
+            
+            return {
+              itemName: item.itemName,
+              sizes: item.sizes.map((size) => {
+                const suitTypeSize = suitTypeItem?.sizes?.find(s => s.name === size.name);
+                const orderSuit = order.suitDetails?.find(sd => {
+                  const sdSuitTypeId = typeof sd.suitType === "object" ? sd.suitType._id : sd.suitType;
+                  return sdSuitTypeId === suitTypeId;
+                });
+                const orderItem = orderSuit?.items?.find(it => it.itemName === item.itemName);
+                const orderSize = orderItem?.sizes?.find(s => s.name === size.name);
+                
+                return {
+                  name: size.name,
+                  type: suitTypeSize?.type || "text",
+                  value: orderSize?.value !== undefined && orderSize?.value !== null ? orderSize.value : (size.value !== undefined && size.value !== null ? size.value : (suitTypeSize?.type === "checkbox" ? false : "")),
+                  options: suitTypeSize?.options || []
+                };
+              }),
+            };
+          }),
+        };
+      });
+    } else if (suitDetailsToUse.length > 0) {
+      // If no customer data, enhance suitDetails with size types from suit types
+      const suitTypeMap = new Map();
+      suitTypes.forEach(st => suitTypeMap.set(st._id, st));
+      
+      suitDetailsToUse = suitDetailsToUse.map((suit) => {
+        const suitTypeId = typeof suit.suitType === "object" ? suit.suitType._id : suit.suitType;
+        const suitTypeObj = suitTypeMap.get(suitTypeId);
+        
+        return {
+          suitType: suitTypeId,
+          items: suit.items.map((item) => {
+            const suitTypeItem = suitTypeObj?.items?.find(it => it.name === item.itemName);
+            
+            return {
+              itemName: item.itemName,
+              sizes: item.sizes.map((size) => {
+                const suitTypeSize = suitTypeItem?.sizes?.find(s => s.name === size.name);
+                
+                return {
+                  name: size.name,
+                  type: suitTypeSize?.type || "text",
+                  value: size.value !== undefined && size.value !== null ? size.value : (suitTypeSize?.type === "checkbox" ? false : ""),
+                  options: suitTypeSize?.options || []
+                };
+              }),
+            };
+          }),
+        };
+      });
+    }
+    
+    // Use customer data if available for name and phone
+    const finalCustomerName = customerData?.name || customerName || "";
+    const finalCustomerPhone = customerData?.phone || customerPhone || "";
+    
+    // Ensure customer is properly selected
+    const formData = {
+      customerPhone: finalCustomerPhone,
       customerId: customerId,
-      customerName: customerName,
-      suitDetails: order.suitDetails || [],
+      customerName: finalCustomerName,
+      suitDetails: suitDetailsToUse,
       assignedEmployee: order.assignedEmployee?._id || order.assignedEmployee || "",
       notes: order.notes || "",
-    });
+    };
+    
+    // Set form and open modal
+    setForm(formData);
     setEditingId(order._id);
     setFormErrors({});
+    setSearchResults([]);
+    setFormModal({ isOpen: true });
   };
+
+  const openAddModal = () => {
+    setForm({
+      customerPhone: "",
+      customerId: "",
+      customerName: "",
+      suitDetails: [],
+      assignedEmployee: "",
+      notes: "",
+    });
+    setEditingId(null);
+    setFormErrors({});
+    setSearchResults([]);
+    setFormModal({ isOpen: true });
+  };
+
+  const closeFormModal = () => {
+    setFormModal({ isOpen: false });
+    setForm({
+      customerPhone: "",
+      customerId: "",
+      customerName: "",
+      suitDetails: [],
+      assignedEmployee: "",
+      notes: "",
+    });
+    setEditingId(null);
+    setFormErrors({});
+    setSearchResults([]);
+  };
+
+  const filteredOrders = orders.filter(order => {
+    const customerName = order.customer?.name || order.customerName || "";
+    const customerPhone = order.customer?.phone || order.customerPhone || "";
+    return (
+      customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customerPhone.includes(searchTerm)
+    );
+  });
 
   const handleDelete = (id) => {
     setDeleteModal({ isOpen: true, id });
@@ -316,12 +537,16 @@ function Orders() {
         confirmText="حذف کریں"
         cancelText="منسوخ کریں"
       />
-      <h2 style={{ direction: 'rtl', textAlign: 'right' }}>آرڈرز کا انتظام</h2>
-
-      <div className="card">
-        <h3>{editingId ? "آرڈر میں ترمیم" : "نیا آرڈر بنائیں"}</h3>
-        
-        <form onSubmit={handleSubmit}>
+      {/* Order Form Modal */}
+      {formModal.isOpen && (
+        <div className="modal-overlay" onClick={closeFormModal}>
+          <div className="modal-content" style={{ maxWidth: '900px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{editingId ? "آرڈر میں ترمیم" : "نیا آرڈر بنائیں"}</h3>
+              <button className="modal-close" onClick={closeFormModal}>×</button>
+            </div>
+            <div className="modal-body">
+              <form onSubmit={handleSubmit}>
           {formErrors.submit && (
             <div className="error-message" style={{ marginBottom: '20px' }}>
               {formErrors.submit}
@@ -340,6 +565,8 @@ function Orders() {
                 className={formErrors.customerPhone ? 'error ltr' : 'ltr'}
                 dir="ltr"
                 required
+                disabled={!!editingId && !!form.customerId}
+                style={editingId && form.customerId ? { backgroundColor: '#f8f9fa', cursor: 'not-allowed' } : {}}
               />
               {formErrors.customerPhone && (
                 <div className="error-message" style={{ 
@@ -441,17 +668,31 @@ function Orders() {
                     <div key={itemIndex} className="mb-20">
                       <strong>{item.itemName}:</strong>
                       <div className="form-row">
-                        {item.sizes.map((size, sizeIndex) => (
-                          <div key={sizeIndex} className="form-group">
-                            <label>{size.name}</label>
-                            <input
-                              type="number"
-                              value={size.value}
-                              readOnly
-                              style={{ backgroundColor: '#f8f9fa' }}
-                            />
-                          </div>
-                        ))}
+                        {item.sizes.map((size, sizeIndex) => {
+                          const sizeType = size.type || "text";
+                          let displayValue = "";
+                          
+                          if (sizeType === "checkbox") {
+                            displayValue = size.value === true ? "✓ منتخب" : "منتخب نہیں";
+                          } else if (sizeType === "dropdown") {
+                            displayValue = size.value || "-";
+                          } else {
+                            displayValue = size.value !== null && size.value !== undefined ? String(size.value) : "-";
+                          }
+                          
+                          return (
+                            <div key={sizeIndex} className="form-group">
+                              <label>{size.name}</label>
+                              <input
+                                type="text"
+                                value={displayValue}
+                                readOnly
+                                style={{ backgroundColor: '#f8f9fa' }}
+                                placeholder="-"
+                              />
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
@@ -485,32 +726,52 @@ function Orders() {
             )}
           </div>
 
-          <div className="action-buttons">
-            <button type="submit" className="primary">
-              {editingId ? "تبدیلیاں محفوظ کریں" : "آرڈر بنائیں"}
-            </button>
-            {editingId && (
-              <button 
-                type="button" 
-                onClick={() => {
-                  setEditingId(null);
-                  setForm({
-                    customerPhone: "",
-                    customerId: "",
-                    customerName: "",
-                    suitDetails: [],
-                    assignedEmployee: "",
-                    notes: "",
-                  });
-                  setFormErrors({});
-                }}
-                className="secondary"
-              >
-                منسوخ کریں
-              </button>
-            )}
+                <div className="action-buttons">
+                  <button type="submit" className="primary">
+                    {editingId ? "تبدیلیاں محفوظ کریں" : "آرڈر بنائیں"}
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={closeFormModal}
+                    className="secondary"
+                  >
+                    منسوخ کریں
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </form>
+        </div>
+      )}
+
+      <h2 style={{ direction: 'rtl', textAlign: 'right' }}>آرڈرز کا انتظام</h2>
+
+      {/* Search and Add Button */}
+      <div className="card" style={{ marginBottom: '20px' }}>
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <input
+              type="text"
+              placeholder="گاہک کے نام یا موبائل نمبر سے تلاش کریں..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px',
+                fontSize: '14px',
+                border: '1px solid #ddd',
+                borderRadius: '4px'
+              }}
+            />
+          </div>
+          <button 
+            onClick={openAddModal}
+            className="primary"
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            + نیا آرڈر بنائیں
+          </button>
+        </div>
       </div>
 
       <div className="card">
@@ -520,9 +781,9 @@ function Orders() {
           <div className="text-center p-20">
             <p>لوڈ ہو رہا ہے...</p>
           </div>
-        ) : orders.length === 0 ? (
+        ) : filteredOrders.length === 0 ? (
           <div className="text-center p-20">
-            <p>کوئی آرڈر نہیں ملا</p>
+            <p>{searchTerm ? "تلاش کے نتائج نہیں ملے" : "کوئی آرڈر نہیں ملا"}</p>
           </div>
         ) : (
           <div className="table-wrapper" dir="rtl">
@@ -539,7 +800,7 @@ function Orders() {
                 </tr>
               </thead>
               <tbody>
-              {orders.map((order) => (
+              {filteredOrders.map((order) => (
                 <tr key={order._id}>
                   <td>
                     <strong>{order.customer?.name || order.customerName || "-"}</strong>
@@ -577,14 +838,24 @@ function Orders() {
                       <button 
                         onClick={() => handleEdit(order)}
                         className="secondary"
+                        title="ترمیم"
+                        style={{ fontSize: '18px', padding: '8px 12px' }}
                       >
-                        ترمیم
+                        ✏️
+                      </button>
+                      <button
+                        onClick={() => window.open(`/print/${order._id}`, '_blank')}
+                        className="primary"
+                      >
+                        پرنٹ
                       </button>
                       <button 
                         onClick={() => handleDelete(order._id)}
                         className="danger"
+                        title="حذف"
+                        style={{ fontSize: '18px', padding: '8px 12px' }}
                       >
-                        حذف
+                        🗑️
                       </button>
                     </div>
                   </td>

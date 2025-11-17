@@ -112,72 +112,8 @@ export const validationRules = {
 
 // Validation functions
 export const validateField = (value, fieldType, options = {}) => {
-  const rules = validationRules[fieldType];
-  if (!rules) return { isValid: true, message: "" };
-
-  const errors = [];
-
-  // Required validation
-  if (options.required && (!value || value.trim() === "")) {
-    errors.push(rules.required);
-  }
-
-  if (value && value.trim() !== "") {
-    // Min length validation
-    if (options.minLength && value.trim().length < options.minLength) {
-      errors.push(typeof rules.minLength === 'function' 
-        ? rules.minLength(options.minLength) 
-        : rules.minLength);
-    }
-
-    // Max length validation
-    if (options.maxLength && value.trim().length > options.maxLength) {
-      errors.push(typeof rules.maxLength === 'function' 
-        ? rules.maxLength(options.maxLength) 
-        : rules.maxLength);
-    }
-
-    // Pattern validation
-    if (options.pattern) {
-      const regex = new RegExp(options.pattern);
-      if (!regex.test(value.trim())) {
-        errors.push(rules.pattern);
-      }
-    }
-
-    // Min value validation (for numbers)
-    if (options.min !== undefined && !isNaN(value)) {
-      const numValue = parseFloat(value);
-      if (numValue < options.min) {
-        errors.push(typeof rules.min === 'function' 
-          ? rules.min(options.min) 
-          : rules.min);
-      }
-    }
-
-    // Max value validation (for numbers)
-    if (options.max !== undefined && !isNaN(value)) {
-      const numValue = parseFloat(value);
-      if (numValue > options.max) {
-        errors.push(typeof rules.max === 'function' 
-          ? rules.max(options.max) 
-          : rules.max);
-      }
-    }
-
-    // Positive number validation
-    if (options.positive && !isNaN(value)) {
-      const numValue = parseFloat(value);
-      if (numValue <= 0) {
-        errors.push(rules.positive);
-      }
-    }
-  }
-
-  return {
-    isValid: errors.length === 0,
-    message: errors[0] || ""
-  };
+  // Validation disabled: always accept the value
+  return { isValid: true, message: "" };
 };
 
 // Common validation patterns
@@ -269,25 +205,8 @@ export const validationOptions = {
 
 // Form validation helper
 export const validateForm = (formData, fieldsToValidate) => {
-  const errors = {};
-  let isValid = true;
-
-  fieldsToValidate.forEach(field => {
-    const value = formData[field.name];
-    const options = validationOptions[field.type] || {};
-    
-    // Merge field-specific options with default options
-    const finalOptions = { ...options, ...field.options };
-    
-    const validation = validateField(value, field.type, finalOptions);
-    
-    if (!validation.isValid) {
-      errors[field.name] = validation.message;
-      isValid = false;
-    }
-  });
-
-  return { isValid, errors };
+  // Validation disabled: always allow submit
+  return { isValid: true, errors: {} };
 };
 
 // Real-time validation hook
