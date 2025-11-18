@@ -1,9 +1,9 @@
 // API Configuration
 // Production URL
-const PRODUCTION_API_URL = 'https://server-tailor-shop.onrender.com';
+// const PRODUCTION_API_URL = 'https://server-tailor-shop.onrender.com';
 
 // Local development URL (commented out - uncomment for local development)
-// const LOCAL_API_URL = 'http://localhost:5000';
+const LOCAL_API_URL = 'http://localhost:5000';
 
 const getApiBaseUrl = () => {
   // Use environment variable if set
@@ -12,10 +12,10 @@ const getApiBaseUrl = () => {
   }
   
   // Use production URL by default
-  return PRODUCTION_API_URL;
+  // return PRODUCTION_API_URL;
   
   // For local development, uncomment the line below and comment the line above
-  // return LOCAL_API_URL;
+  return LOCAL_API_URL;
 };
 
 const API_BASE_URL = getApiBaseUrl();

@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import ValidatedInput from "../components/ValidatedInput";
 import FractionalInput from "../components/FractionalInput";
 import ConfirmModal from "../components/ConfirmModal";
+import Pagination from "../components/Pagination";
 import { validateForm, validationOptions } from "../utils/validation";
 import { API_ENDPOINTS } from "../config/api";
 
@@ -22,6 +23,10 @@ function Customers() {
   const [editingId, setEditingId] = useState(null);
   const [formModal, setFormModal] = useState({ isOpen: false });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
+  
+  // Pagination states
+  const [customersPage, setCustomersPage] = useState(1);
+  const [customersPerPage, setCustomersPerPage] = useState(10);
 
   useEffect(() => {
     fetchCustomers();
@@ -255,6 +260,12 @@ function Customers() {
     c.phone?.includes(searchTerm) ||
     c.serialNumber?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Pagination for customers table
+  const customersStartIndex = (customersPage - 1) * customersPerPage;
+  const customersEndIndex = customersStartIndex + customersPerPage;
+  const paginatedCustomers = filteredCustomers.slice(customersStartIndex, customersEndIndex);
+  const totalCustomersPages = Math.ceil(filteredCustomers.length / customersPerPage);
 
   const handleDelete = (id) => {
     setDeleteModal({ isOpen: true, id });
@@ -500,7 +511,10 @@ function Customers() {
               type="text"
               placeholder="نام، موبائل یا سیریل نمبر سے تلاش کریں..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCustomersPage(1); // Reset to first page on search
+              }}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -545,7 +559,7 @@ function Customers() {
                 </tr>
               </thead>
               <tbody>
-              {filteredCustomers.map((c) => (
+              {paginatedCustomers.map((c) => (
                 <tr key={c._id}>
                   <td>
                     <strong>{c.name}</strong>
@@ -602,6 +616,20 @@ function Customers() {
               </tbody>
             </table>
           </div>
+        )}
+        
+        {filteredCustomers.length > 0 && (
+          <Pagination
+            currentPage={customersPage}
+            totalPages={totalCustomersPages}
+            onPageChange={setCustomersPage}
+            itemsPerPage={customersPerPage}
+            totalItems={filteredCustomers.length}
+            onItemsPerPageChange={(value) => {
+              setCustomersPerPage(value);
+              setCustomersPage(1);
+            }}
+          />
         )}
       </div>
     </div>

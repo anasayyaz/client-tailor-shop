@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="yellowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffd700;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ffed4e;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="maroonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#800000;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a93226;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Yellow background -->
+  <rect width="100" height="100" fill="url(#yellowGrad)" rx="8"/>
+  
+  <!-- Maroon graphic - simplified logo design -->
+  <g transform="translate(50, 35)">
+    <!-- Top roof/lapel shapes -->
+    <path d="M -15,-12 L -8,-20 L 0,-15 L 8,-20 L 15,-12 Z" fill="url(#maroonGrad)"/>
+    
+    <!-- Crossed needles -->
+    <line x1="-12" y1="-8" x2="12" y2="8" stroke="url(#maroonGrad)" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="12" y1="-8" x2="-12" y2="8" stroke="url(#maroonGrad)" stroke-width="2.5" stroke-linecap="round"/>
+    
+    <!-- Thread loops on sides -->
+    <path d="M -18, 5 Q -22, 0, -18, -5 Q -15, -8, -12, -5" stroke="url(#maroonGrad)" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M 18, 5 Q 22, 0, 18, -5 Q 15, -8, 12, -5" stroke="url(#maroonGrad)" stroke-width="2" fill="none" stroke-linecap="round"/>
+  </g>
+  
+  <!-- Black vertical bar on right -->
+  <rect x="92" y="50" width="8" height="50" fill="#000000"/>
+</svg>

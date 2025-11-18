@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import ValidatedInput from "../components/ValidatedInput";
 import ConfirmModal from "../components/ConfirmModal";
+import Pagination from "../components/Pagination";
 import { validateForm, validateField, validationOptions } from "../utils/validation";
 import { API_ENDPOINTS } from "../config/api";
 
@@ -19,18 +20,23 @@ function Employees() {
     date: new Date().toISOString().slice(0, 10),
   });
   const [expenseFormErrors, setExpenseFormErrors] = useState({});
-  const [filter, setFilter] = useState({ startDate: "", endDate: "", search: "" });
+  const [filter, setFilter] = useState({ startDate: "", endDate: "", search: "", employeeId: "all" });
+  const [filterErrors, setFilterErrors] = useState({});
+  const [expenseReportEmployees, setExpenseReportEmployees] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [formModal, setFormModal] = useState({ isOpen: false });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
   const [employeeReportModal, setEmployeeReportModal] = useState({ isOpen: false, employee: null });
   const [quickExpenseModal, setQuickExpenseModal] = useState({ isOpen: false, employeeId: null, employeeName: "" });
   const [expenseReportModal, setExpenseReportModal] = useState({ isOpen: false });
-
-  useEffect(() => {
-    fetchEmployees();
-  }, []);
-
+  
+  // Pagination states
+  const [employeesPage, setEmployeesPage] = useState(1);
+  const [employeesPerPage, setEmployeesPerPage] = useState(10);
+  const [expenseReportPage, setExpenseReportPage] = useState(1);
+  const [expenseReportPerPage, setExpenseReportPerPage] = useState(10);
+  const [employeeExpensesPage, setEmployeeExpensesPage] = useState(1);
+  const [employeeExpensesPerPage, setEmployeeExpensesPerPage] = useState(10);
 
   const fetchEmployees = async () => {
     try {
@@ -44,6 +50,50 @@ function Employees() {
       setLoading(false);
     }
   };
+
+  const fetchFilteredEmployees = useCallback(async () => {
+    // Don't fetch if there are date validation errors
+    if (filterErrors.dateRange) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (filter.startDate) params.append('startDate', filter.startDate);
+      if (filter.endDate) params.append('endDate', filter.endDate);
+      if (filter.employeeId && filter.employeeId !== 'all') {
+        params.append('employeeId', filter.employeeId);
+      }
+      
+      const queryString = params.toString();
+      const url = queryString 
+        ? `${API_ENDPOINTS.EMPLOYEES}?${queryString}`
+        : API_ENDPOINTS.EMPLOYEES;
+      
+      const res = await axios.get(url);
+      setExpenseReportEmployees(res.data || []);
+    } catch (err) {
+      console.error("Error fetching filtered employees:", err);
+      setExpenseReportEmployees([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [filter.startDate, filter.endDate, filter.employeeId, filterErrors.dateRange]);
+
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
+
+  // Fetch filtered employees when expense report modal is open and filters change
+  useEffect(() => {
+    if (expenseReportModal.isOpen) {
+      fetchFilteredEmployees();
+    } else {
+      // Clear filtered employees when modal closes
+      setExpenseReportEmployees([]);
+    }
+  }, [expenseReportModal.isOpen, fetchFilteredEmployees, filterErrors.dateRange]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -67,7 +117,21 @@ function Employees() {
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
-    setFilter({ ...filter, [name]: value });
+    const newFilter = { ...filter, [name]: value };
+    setFilter(newFilter);
+    
+    // Validate dates
+    const errors = {};
+    if (newFilter.startDate && newFilter.endDate) {
+      const startDate = new Date(newFilter.startDate);
+      const endDate = new Date(newFilter.endDate);
+      
+      if (startDate > endDate) {
+        errors.dateRange = "شروع کی تاریخ اختتامی تاریخ سے بعد نہیں ہو سکتی";
+      }
+    }
+    
+    setFilterErrors(errors);
   };
 
   const validateEmployeeForm = () => {
@@ -242,9 +306,11 @@ function Employees() {
       } else {
         setEmployeeReportModal({ isOpen: true, employee: emp });
       }
+      setEmployeeExpensesPage(1); // Reset to first page when opening modal
     } catch (err) {
       console.error("Error fetching employee data:", err);
       setEmployeeReportModal({ isOpen: true, employee: emp });
+      setEmployeeExpensesPage(1);
     }
   };
 
@@ -264,6 +330,7 @@ function Employees() {
   };
 
   const filterExpenses = (expenses) => {
+    // This function is still used for the main employees list table
     if (!filter.startDate || !filter.endDate) return expenses;
     const start = new Date(filter.startDate);
     const end = new Date(filter.endDate);
@@ -280,6 +347,25 @@ function Employees() {
       e.phone?.includes(searchTerm) ||
       e.cnic?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Pagination for employees table
+  const employeesStartIndex = (employeesPage - 1) * employeesPerPage;
+  const employeesEndIndex = employeesStartIndex + employeesPerPage;
+  const paginatedEmployees = filteredEmployees.slice(employeesStartIndex, employeesEndIndex);
+  const totalEmployeesPages = Math.ceil(filteredEmployees.length / employeesPerPage);
+
+  // Pagination for expense report modal
+  const expenseReportStartIndex = (expenseReportPage - 1) * expenseReportPerPage;
+  const expenseReportEndIndex = expenseReportStartIndex + expenseReportPerPage;
+  const paginatedExpenseReportEmployees = expenseReportEmployees.slice(expenseReportStartIndex, expenseReportEndIndex);
+  const totalExpenseReportPages = Math.ceil(expenseReportEmployees.length / expenseReportPerPage);
+
+  // Pagination for employee expenses in employee report modal
+  const employeeExpenses = employeeReportModal.employee?.expenses || [];
+  const employeeExpensesStartIndex = (employeeExpensesPage - 1) * employeeExpensesPerPage;
+  const employeeExpensesEndIndex = employeeExpensesStartIndex + employeeExpensesPerPage;
+  const paginatedEmployeeExpenses = employeeExpenses.slice(employeeExpensesStartIndex, employeeExpensesEndIndex);
+  const totalEmployeeExpensesPages = Math.ceil(employeeExpenses.length / employeeExpensesPerPage);
 
   return (
     <div dir="rtl" style={{ direction: 'rtl', textAlign: 'right' }}>
@@ -400,33 +486,48 @@ function Employees() {
                   </button>
                 </div>
                 
-                {employeeReportModal.employee.expenses && employeeReportModal.employee.expenses.length > 0 ? (
-                  <div className="table-wrapper">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>تاریخ</th>
-                          <th>رقم</th>
-                          <th>تفصیل</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {employeeReportModal.employee.expenses.map((ex, i) => (
-                          <tr key={i}>
-                            <td>{new Date(ex.date).toLocaleDateString('ur-PK')}</td>
-                            <td><strong>روپے {ex.amount.toLocaleString()}</strong></td>
-                            <td>{ex.description}</td>
+                {employeeExpenses.length > 0 ? (
+                  <>
+                    <div className="table-wrapper">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>تاریخ</th>
+                            <th>رقم</th>
+                            <th>تفصیل</th>
                           </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr>
-                          <td colSpan="2"><strong>کل خرچ:</strong></td>
-                          <td><strong>روپے {employeeReportModal.employee.expenses.reduce((acc, ex) => acc + ex.amount, 0).toLocaleString()}</strong></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {paginatedEmployeeExpenses.map((ex, i) => (
+                            <tr key={i}>
+                              <td>{new Date(ex.date).toLocaleDateString('ur-PK')}</td>
+                              <td><strong>روپے {(ex.amount || 0).toLocaleString()}</strong></td>
+                              <td>{ex.description}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr>
+                            <td colSpan="2"><strong>کل خرچ:</strong></td>
+                            <td><strong>روپے {employeeExpenses.reduce((acc, ex) => acc + (ex.amount || 0), 0).toLocaleString()}</strong></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                    {employeeExpenses.length > employeeExpensesPerPage && (
+                      <Pagination
+                        currentPage={employeeExpensesPage}
+                        totalPages={totalEmployeeExpensesPages}
+                        onPageChange={setEmployeeExpensesPage}
+                        itemsPerPage={employeeExpensesPerPage}
+                        totalItems={employeeExpenses.length}
+                        onItemsPerPageChange={(value) => {
+                          setEmployeeExpensesPerPage(value);
+                          setEmployeeExpensesPage(1);
+                        }}
+                      />
+                    )}
+                  </>
                 ) : (
                   <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>کوئی خرچ نہیں ملا</p>
                 )}
@@ -527,7 +628,10 @@ function Employees() {
               type="text"
               placeholder="نام، موبائل یا شناختی کارڈ نمبر سے تلاش کریں..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setEmployeesPage(1); // Reset to first page on search
+              }}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -538,7 +642,12 @@ function Employees() {
             />
           </div>
           <button 
-            onClick={() => setExpenseReportModal({ isOpen: true })}
+            onClick={() => {
+              setFilter({ startDate: "", endDate: "", search: "", employeeId: "all" });
+              setFilterErrors({});
+              setExpenseReportPage(1);
+              setExpenseReportModal({ isOpen: true });
+            }}
             className="success"
             style={{ whiteSpace: 'nowrap' }}
           >
@@ -575,14 +684,15 @@ function Employees() {
                   <th>موبائل</th>
                   <th>شناختی کارڈ</th>
                   <th>کل خرچ</th>
-                  <th>تفصیلات</th>
+                  <th>خرچ کی تعداد</th>
                   <th>عملیات</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredEmployees.map((emp) => {
+                {paginatedEmployees.map((emp) => {
                   const expenses = filterExpenses(emp.expenses || []);
-                  const totalExpense = expenses.reduce((acc, ex) => acc + ex.amount, 0);
+                  const totalExpense = expenses.reduce((acc, ex) => acc + (ex.amount || 0), 0);
+                  const expenseCount = expenses.length;
 
                   return (
                     <tr key={emp._id}>
@@ -595,18 +705,25 @@ function Employees() {
                         <strong>روپے {totalExpense.toLocaleString()}</strong>
                       </td>
                       <td>
-                        {expenses.map((ex, i) => (
-                          <div key={i} className="mb-20">
-                            <div className="status-badge status-pending">
-                              روپے {ex.amount.toLocaleString()}
-                            </div>
-                            <div style={{ marginTop: '8px', fontSize: '13px' }}>
-                              <strong>تفصیل:</strong> {ex.description}
-                              <br />
-                              <strong>تاریخ:</strong> {new Date(ex.date).toLocaleDateString('ur-PK')}
-                            </div>
-                          </div>
-                        ))}
+                        <span className="status-badge status-pending">
+                          {expenseCount} خرچ
+                        </span>
+                        {expenseCount > 0 && (
+                          <button
+                            onClick={() => openEmployeeReport(emp)}
+                            className="secondary"
+                            style={{ 
+                              marginTop: '8px', 
+                              fontSize: '12px', 
+                              padding: '4px 8px',
+                              display: 'block',
+                              width: '100%'
+                            }}
+                            title="تفصیلات دیکھیں"
+                          >
+                            تفصیلات دیکھیں
+                          </button>
+                        )}
                       </td>
                       <td>
                         <div className="action-buttons" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -651,6 +768,20 @@ function Employees() {
             </table>
           </div>
         )}
+        
+        {filteredEmployees.length > 0 && (
+          <Pagination
+            currentPage={employeesPage}
+            totalPages={totalEmployeesPages}
+            onPageChange={setEmployeesPage}
+            itemsPerPage={employeesPerPage}
+            totalItems={filteredEmployees.length}
+            onItemsPerPageChange={(value) => {
+              setEmployeesPerPage(value);
+              setEmployeesPage(1);
+            }}
+          />
+        )}
       </div>
 
       {/* Expense Report Modal */}
@@ -662,17 +793,56 @@ function Employees() {
               <button className="modal-close" onClick={() => setExpenseReportModal({ isOpen: false })}>×</button>
             </div>
             <div className="modal-body">
-              {/* Date Filter for Expenses */}
+              {/* Filters for Expenses */}
               <div style={{ marginBottom: '30px' }}>
-                <h4>خرچ کی تاریخ سے فلٹر</h4>
+                <h4>فلٹر</h4>
+                {filterErrors.dateRange && (
+                  <div className="error-message" style={{ 
+                    marginBottom: '15px', 
+                    padding: '10px', 
+                    background: '#fee',
+                    border: '1px solid #fcc',
+                    borderRadius: '4px',
+                    color: '#c33'
+                  }}>
+                    ⚠️ {filterErrors.dateRange}
+                  </div>
+                )}
                 <div className="form-row">
+                  <div className="form-group">
+                    <label>ملازم</label>
+                    <select 
+                      name="employeeId" 
+                      value={filter.employeeId} 
+                      onChange={handleFilterChange}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        fontSize: '14px',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      <option value="all">تمام ملازمین</option>
+                      {employees.map((emp) => (
+                        <option key={emp._id} value={emp._id}>
+                          {emp.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
                   <div className="form-group">
                     <label>شروع کی تاریخ</label>
                     <input 
                       type="date" 
                       name="startDate" 
                       value={filter.startDate} 
-                      onChange={handleFilterChange} 
+                      onChange={handleFilterChange}
+                      max={filter.endDate || undefined}
+                      style={{
+                        borderColor: filterErrors.dateRange ? '#fcc' : undefined
+                      }}
                     />
                   </div>
                   
@@ -682,7 +852,11 @@ function Employees() {
                       type="date" 
                       name="endDate" 
                       value={filter.endDate} 
-                      onChange={handleFilterChange} 
+                      onChange={handleFilterChange}
+                      min={filter.startDate || undefined}
+                      style={{
+                        borderColor: filterErrors.dateRange ? '#fcc' : undefined
+                      }}
                     />
                   </div>
                 </div>
@@ -690,9 +864,11 @@ function Employees() {
 
               {/* Detailed Expense Report Table */}
               <div>
-                <h4>تمام ملازمین کے خرچ</h4>
-                {employees.length === 0 ? (
-                  <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>کوئی ملازم نہیں ملا</p>
+                <h4>{filter.employeeId === 'all' ? 'تمام ملازمین کے خرچ' : 'ملازم کے خرچ'}</h4>
+                {loading && expenseReportEmployees.length === 0 ? (
+                  <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>لوڈ ہو رہا ہے...</p>
+                ) : expenseReportEmployees.length === 0 ? (
+                  <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>کوئی ملازم یا خرچ نہیں ملا</p>
                 ) : (
                   <div className="table-wrapper" dir="rtl">
                     <table dir="rtl">
@@ -705,9 +881,9 @@ function Employees() {
                         </tr>
                       </thead>
                       <tbody>
-                        {employees.map((emp) => {
-                          const expenses = filterExpenses(emp.expenses || []);
-                          const totalExpense = expenses.reduce((acc, ex) => acc + ex.amount, 0);
+                        {paginatedExpenseReportEmployees.map((emp) => {
+                          const expenses = emp.expenses || [];
+                          const totalExpense = expenses.reduce((acc, ex) => acc + (ex.amount || 0), 0);
                           
                           return (
                             <tr key={emp._id}>
@@ -719,7 +895,7 @@ function Employees() {
                                     {expenses.map((ex, i) => (
                                       <div key={i} style={{ marginBottom: '10px', padding: '8px', background: '#f8f9fa', borderRadius: '4px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                          <strong>روپے {ex.amount.toLocaleString()}</strong>
+                                          <strong>روپے {(ex.amount || 0).toLocaleString()}</strong>
                                           <span style={{ fontSize: '12px', color: '#666' }}>
                                             {new Date(ex.date).toLocaleDateString('ur-PK')}
                                           </span>
@@ -747,9 +923,9 @@ function Employees() {
                         <tr style={{ background: '#f8f9fa', fontWeight: 'bold' }}>
                           <td colSpan="3" style={{ textAlign: 'right' }}>کل خرچ:</td>
                           <td style={{ color: '#800000', fontSize: '18px' }}>
-                            روپے {employees.reduce((total, emp) => {
-                              const expenses = filterExpenses(emp.expenses || []);
-                              return total + expenses.reduce((acc, ex) => acc + ex.amount, 0);
+                            روپے {expenseReportEmployees.reduce((total, emp) => {
+                              const expenses = emp.expenses || [];
+                              return total + expenses.reduce((acc, ex) => acc + (ex.amount || 0), 0);
                             }, 0).toLocaleString()}
                           </td>
                         </tr>
@@ -757,11 +933,28 @@ function Employees() {
                     </table>
                   </div>
                 )}
+                
+                {expenseReportEmployees.length > expenseReportPerPage && (
+                  <Pagination
+                    currentPage={expenseReportPage}
+                    totalPages={totalExpenseReportPages}
+                    onPageChange={setExpenseReportPage}
+                    itemsPerPage={expenseReportPerPage}
+                    totalItems={expenseReportEmployees.length}
+                    onItemsPerPageChange={(value) => {
+                      setExpenseReportPerPage(value);
+                      setExpenseReportPage(1);
+                    }}
+                  />
+                )}
               </div>
             </div>
             <div className="modal-footer">
               <button 
-                onClick={() => setExpenseReportModal({ isOpen: false })}
+                onClick={() => {
+                  setExpenseReportModal({ isOpen: false });
+                  setExpenseReportPage(1);
+                }}
                 className="secondary"
               >
                 بند کریں
