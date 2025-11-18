@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import { API_ENDPOINTS } from "../config/api";
+import { API_ENDPOINTS, api } from "../config/api";
 
 function Dashboard() {
   const [totalCustomers, setTotalCustomers] = useState(0);
@@ -25,15 +24,15 @@ function Dashboard() {
       setError(null);
       
       const [customersRes, ordersRes, employeesRes] = await Promise.all([
-        axios.get(API_ENDPOINTS.CUSTOMERS).catch(err => {
+        api.get(API_ENDPOINTS.CUSTOMERS).catch(err => {
           console.error("Error fetching customers:", err);
           return { data: [] };
         }),
-        axios.get(API_ENDPOINTS.ORDERS).catch(err => {
+        api.get(API_ENDPOINTS.ORDERS).catch(err => {
           console.error("Error fetching orders:", err);
           return { data: [] };
         }),
-        axios.get(API_ENDPOINTS.EMPLOYEES).catch(err => {
+        api.get(API_ENDPOINTS.EMPLOYEES).catch(err => {
           console.error("Error fetching employees:", err);
           return { data: [] };
         })

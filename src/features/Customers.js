@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
 import { toast } from "react-toastify";
 import ValidatedInput from "../components/ValidatedInput";
 import FractionalInput from "../components/FractionalInput";
 import ConfirmModal from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
 import { validateForm, validationOptions } from "../utils/validation";
-import { API_ENDPOINTS } from "../config/api";
+import { API_ENDPOINTS, api } from "../config/api";
 
 function Customers() {
   const [customers, setCustomers] = useState([]);
@@ -36,7 +35,7 @@ function Customers() {
   const fetchCustomers = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(API_ENDPOINTS.CUSTOMERS);
+      const res = await api.get(API_ENDPOINTS.CUSTOMERS);
       setCustomers(res.data || []);
     } catch (err) {
       console.error("Error fetching customers:", err);
@@ -48,7 +47,7 @@ function Customers() {
 
   const fetchSuitTypes = async () => {
     try {
-      const res = await axios.get(API_ENDPOINTS.SUIT_TYPES);
+      const res = await api.get(API_ENDPOINTS.SUIT_TYPES);
       setSuitTypes(res.data || []);
       return res.data || [];
     } catch (err) {
@@ -151,10 +150,10 @@ function Customers() {
       };
       
       if (editingId) {
-        await axios.put(`${API_ENDPOINTS.CUSTOMERS}/${editingId}`, formData);
+        await api.put(`${API_ENDPOINTS.CUSTOMERS}/${editingId}`, formData);
         setEditingId(null);
       } else {
-        await axios.post(API_ENDPOINTS.CUSTOMERS, formData);
+        await api.post(API_ENDPOINTS.CUSTOMERS, formData);
       }
       setForm({ name: "", phone: "", serialNumber: "", suits: [] });
       setFormErrors({});
@@ -276,7 +275,7 @@ function Customers() {
     
     try {
       setLoading(true);
-      await axios.delete(`${API_ENDPOINTS.CUSTOMERS}/${deleteModal.id}`);
+      await api.delete(`${API_ENDPOINTS.CUSTOMERS}/${deleteModal.id}`);
       await fetchCustomers();
       toast.success("گاہک کامیابی سے حذف ہو گیا");
     } catch (error) {

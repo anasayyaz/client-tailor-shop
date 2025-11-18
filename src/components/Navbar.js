@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ConfirmModal from "./ConfirmModal";
+import OfflineIndicator from "./OfflineIndicator";
 import logo from "../assets/logo.png";
 import "./Navbar.css";
 
@@ -37,6 +38,7 @@ function Navbar() {
         <div className="navbar-brand">
           <img src={logo} alt="لوگو" className="navbar-logo" />
           <span className="brand-text">ٹیلر شاپ مینجمنٹ</span>
+          <OfflineIndicator />
         </div>
         
         <div className="navbar-menu">

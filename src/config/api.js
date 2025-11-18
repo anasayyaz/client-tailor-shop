@@ -10,5 +10,8 @@ export const API_ENDPOINTS = {
   SUIT_TYPES: `${API_BASE_URL}/api/suit-types`,
 };
 
+// Export offline API wrapper
+export { offlineApi as api } from '../utils/offlineApi';
+
 export default API_BASE_URL;
 

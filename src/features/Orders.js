@@ -1,12 +1,11 @@
 import React, { useEffect, useState, useRef } from "react";
-import axios from "axios";
 import { toast } from "react-toastify";
 import ValidatedInput from "../components/ValidatedInput";
 import FractionalInput from "../components/FractionalInput";
 import ConfirmModal from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
 import { validateForm, validateField, validationOptions } from "../utils/validation";
-import { API_ENDPOINTS } from "../config/api";
+import { API_ENDPOINTS, api } from "../config/api";
 
 function Orders() {
   const [orders, setOrders] = useState([]);
@@ -60,7 +59,7 @@ function Orders() {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(API_ENDPOINTS.ORDERS);
+      const res = await api.get(API_ENDPOINTS.ORDERS);
       setOrders(res.data || []);
     } catch (err) {
       console.error("Error fetching orders:", err);
@@ -72,7 +71,7 @@ function Orders() {
 
   const fetchSuitTypes = async () => {
     try {
-      const res = await axios.get(API_ENDPOINTS.SUIT_TYPES);
+      const res = await api.get(API_ENDPOINTS.SUIT_TYPES);
       setSuitTypes(res.data || []);
     } catch (err) {
       console.error("Error fetching suit types:", err);
@@ -82,7 +81,7 @@ function Orders() {
 
   const fetchEmployees = async () => {
     try {
-      const res = await axios.get(API_ENDPOINTS.EMPLOYEES);
+      const res = await api.get(API_ENDPOINTS.EMPLOYEES);
       setEmployees(res.data || []);
     } catch (err) {
       console.error("Error fetching employees:", err);
@@ -123,7 +122,7 @@ function Orders() {
         setSearchLoading(true);
         try {
           // Query backend by phone instead of fetching all customers
-          const res = await axios.get(`${API_ENDPOINTS.CUSTOMERS}/phone/${value}`, {
+          const res = await api.get(`${API_ENDPOINTS.CUSTOMERS}/phone/${value}`, {
             signal: searchAbortController.current.signal
           });
           // If found, show a single result list to select from
@@ -343,10 +342,10 @@ function Orders() {
       };
 
       if (editingId) {
-        await axios.put(`${API_ENDPOINTS.ORDERS}/${editingId}`, orderData);
+        await api.put(`${API_ENDPOINTS.ORDERS}/${editingId}`, orderData);
         setEditingId(null);
       } else {
-        await axios.post(API_ENDPOINTS.ORDERS, orderData);
+        await api.post(API_ENDPOINTS.ORDERS, orderData);
       }
 
       setForm({
@@ -382,7 +381,7 @@ function Orders() {
     let customerData = null;
     if (customerId) {
       try {
-        const res = await axios.get(`${API_ENDPOINTS.CUSTOMERS}/${customerId}`);
+        const res = await api.get(`${API_ENDPOINTS.CUSTOMERS}/${customerId}`);
         customerData = res.data;
         // Update name and phone from fetched customer data if available
         if (customerData) {
@@ -527,7 +526,7 @@ function Orders() {
     
     try {
       setLoading(true);
-      await axios.delete(`${API_ENDPOINTS.ORDERS}/${deleteModal.id}`);
+      await api.delete(`${API_ENDPOINTS.ORDERS}/${deleteModal.id}`);
       await fetchOrders();
       toast.success("آرڈر کامیابی سے حذف ہو گیا");
     } catch (error) {

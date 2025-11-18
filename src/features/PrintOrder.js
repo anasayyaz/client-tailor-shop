@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import axios from "axios";
 import logo from "../assets/logo.png";
 import "../styles/PrintOrder.css";
-import { API_ENDPOINTS } from "../config/api";
+import { API_ENDPOINTS, api } from "../config/api";
 
 function PrintOrder() {
   const { id } = useParams();
@@ -19,7 +18,7 @@ function PrintOrder() {
     try {
       setLoading(true);
       setError(null);
-      const res = await axios.get(`${API_ENDPOINTS.ORDERS}/${id}`);
+      const res = await api.get(`${API_ENDPOINTS.ORDERS}/${id}`);
       setOrder(res.data);
       setTimeout(() => {
         window.print();

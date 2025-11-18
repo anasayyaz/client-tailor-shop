@@ -1,0 +1,53 @@
+/* Minimal offline indicator in navbar */
+.offline-indicator {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  direction: rtl;
+}
+
+.offline-indicator.offline {
+  color: #ff4444;
+  background: rgba(255, 68, 68, 0.15);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+}
+
+.offline-indicator.online {
+  color: #00c851;
+  background: rgba(0, 200, 81, 0.15);
+  border: 1px solid rgba(0, 200, 81, 0.3);
+}
+
+.offline-indicator.syncing {
+  color: #ffbb33;
+  background: rgba(255, 187, 51, 0.15);
+  border: 1px solid rgba(255, 187, 51, 0.3);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .offline-indicator {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  .offline-indicator {
+    display: none; /* Hide on mobile to save space */
+  }
+}
+

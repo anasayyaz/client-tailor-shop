@@ -1,11 +1,10 @@
 import React, { useEffect, useState, useCallback } from "react";
-import axios from "axios";
 import { toast } from "react-toastify";
 import ValidatedInput from "../components/ValidatedInput";
 import ConfirmModal from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
 import { validateForm, validateField, validationOptions } from "../utils/validation";
-import { API_ENDPOINTS } from "../config/api";
+import { API_ENDPOINTS, api } from "../config/api";
 
 function Employees() {
   const [employees, setEmployees] = useState([]);
@@ -41,7 +40,7 @@ function Employees() {
   const fetchEmployees = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(API_ENDPOINTS.EMPLOYEES);
+      const res = await api.get(API_ENDPOINTS.EMPLOYEES);
       setEmployees(res.data || []);
     } catch (err) {
       console.error("Error fetching employees:", err);
@@ -71,7 +70,7 @@ function Employees() {
         ? `${API_ENDPOINTS.EMPLOYEES}?${queryString}`
         : API_ENDPOINTS.EMPLOYEES;
       
-      const res = await axios.get(url);
+      const res = await api.get(url);
       setExpenseReportEmployees(res.data || []);
     } catch (err) {
       console.error("Error fetching filtered employees:", err);
@@ -185,10 +184,10 @@ function Employees() {
       setLoading(true);
       const isEditing = !!editingId;
       if (editingId) {
-        await axios.put(`${API_ENDPOINTS.EMPLOYEES}/${editingId}`, form);
+        await api.put(`${API_ENDPOINTS.EMPLOYEES}/${editingId}`, form);
         setEditingId(null);
       } else {
-        await axios.post(API_ENDPOINTS.EMPLOYEES, form);
+        await api.post(API_ENDPOINTS.EMPLOYEES, form);
       }
       setForm({ name: "", phone: "", cnic: "" });
       setFormErrors({});
@@ -235,7 +234,7 @@ function Employees() {
     
     try {
       setLoading(true);
-      await axios.delete(`${API_ENDPOINTS.EMPLOYEES}/${deleteModal.id}`);
+      await api.delete(`${API_ENDPOINTS.EMPLOYEES}/${deleteModal.id}`);
       await fetchEmployees();
       toast.success("ملازم کامیابی سے حذف ہو گیا");
     } catch (error) {
@@ -256,7 +255,7 @@ function Employees() {
 
     try {
       setLoading(true);
-      await axios.post(`${API_ENDPOINTS.EMPLOYEES}/${expenseForm.employeeId}/expense`, {
+      await api.post(`${API_ENDPOINTS.EMPLOYEES}/${expenseForm.employeeId}/expense`, {
         amount: Number(expenseForm.amount),
         description: expenseForm.description,
         date: expenseForm.date,
@@ -299,7 +298,7 @@ function Employees() {
   const openEmployeeReport = async (emp) => {
     // Refresh employee data to get latest expenses
     try {
-      const res = await axios.get(API_ENDPOINTS.EMPLOYEES);
+      const res = await api.get(API_ENDPOINTS.EMPLOYEES);
       const updatedEmployee = res.data.find(e => e._id === emp._id);
       if (updatedEmployee) {
         setEmployeeReportModal({ isOpen: true, employee: updatedEmployee });

@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
 import { toast } from "react-toastify";
 import ValidatedInput from "../components/ValidatedInput";
 import ConfirmModal from "../components/ConfirmModal";
 import { validateForm, validateField, validationOptions } from "../utils/validation";
-import { API_ENDPOINTS } from "../config/api";
+import { API_ENDPOINTS, api } from "../config/api";
 
 function SuitTypes() {
   const [suitTypes, setSuitTypes] = useState([]);
@@ -22,7 +21,7 @@ function SuitTypes() {
   const fetchSuitTypes = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(API_ENDPOINTS.SUIT_TYPES);
+      const res = await api.get(API_ENDPOINTS.SUIT_TYPES);
       setSuitTypes(res.data || []);
     } catch (err) {
       console.error("Error fetching suit types:", err);
@@ -197,10 +196,10 @@ function SuitTypes() {
       };
       
       if (editingId) {
-        await axios.put(`${API_ENDPOINTS.SUIT_TYPES}/${editingId}`, formData);
+        await api.put(`${API_ENDPOINTS.SUIT_TYPES}/${editingId}`, formData);
         setEditingId(null);
       } else {
-        await axios.post(API_ENDPOINTS.SUIT_TYPES, formData);
+        await api.post(API_ENDPOINTS.SUIT_TYPES, formData);
       }
       setForm({
         name: "",
@@ -274,7 +273,7 @@ function SuitTypes() {
     
     try {
       setLoading(true);
-      await axios.delete(`${API_ENDPOINTS.SUIT_TYPES}/${deleteModal.id}`);
+      await api.delete(`${API_ENDPOINTS.SUIT_TYPES}/${deleteModal.id}`);
       await fetchSuitTypes();
       toast.success("سوٹ کی قسم کامیابی سے حذف ہو گئی");
     } catch (error) {
