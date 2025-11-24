@@ -4,6 +4,7 @@ import ValidatedInput from "../components/ValidatedInput";
 import FractionalInput from "../components/FractionalInput";
 import ConfirmModal from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
+import SpeechToText from "../components/SpeechToText";
 import { validateForm, validationOptions } from "../utils/validation";
 import { API_ENDPOINTS, api } from "../config/api";
 
@@ -16,12 +17,14 @@ function Customers() {
     name: "",
     phone: "",
     serialNumber: "",
+    rawSpeechInput: "",
     suits: [],
   });
   const [formErrors, setFormErrors] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [formModal, setFormModal] = useState({ isOpen: false });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null });
+  const [speechModal, setSpeechModal] = useState({ isOpen: false });
   
   // Pagination states
   const [customersPage, setCustomersPage] = useState(1);
@@ -89,12 +92,36 @@ function Customers() {
         suitType: selectedSuitType._id,
         items: selectedSuitType.items.map((item) => ({
           itemName: item.name,
-          sizes: item.sizes.map((size) => ({
-            name: size.name,
-            type: size.type || "text", // Preserve size type
-            value: size.type === "checkbox" ? false : "", // Initialize based on type
-            options: size.options || [], // Preserve dropdown options
-          })),
+          sizes: item.sizes.map((size) => {
+            let initialValue;
+            if (size.type === "checkbox") {
+              initialValue = false;
+            } else if (size.type === "group") {
+              // Initialize group with all fields
+              initialValue = size.fields.map(field => ({
+                name: field.name,
+                type: field.type,
+                value: field.type === "checkbox" ? false : "",
+                options: field.options || []
+              }));
+            } else if (size.type === "array") {
+              // Initialize empty array
+              initialValue = [];
+            } else {
+              initialValue = "";
+            }
+            
+            return {
+              name: size.name,
+              type: size.type || "text",
+              value: initialValue,
+              options: size.options || [],
+              fields: size.fields || [],
+              itemTemplate: size.itemTemplate || [],
+              minItems: size.minItems || 0,
+              maxItems: size.maxItems || 10
+            };
+          }),
         })),
       };
 
@@ -104,18 +131,70 @@ function Customers() {
     }
   };
 
-  const handleSizeValueChange = (e, suitIndex, itemIndex, sizeIndex) => {
+  const handleSizeValueChange = (e, suitIndex, itemIndex, sizeIndex, nestedPath = null) => {
     const { value, type, checked } = e.target;
-    const updatedSuits = [...form.suits];
+    const updatedSuits = JSON.parse(JSON.stringify(form.suits)); // Deep clone
     const size = updatedSuits[suitIndex].items[itemIndex].sizes[sizeIndex];
     
-    if (type === "checkbox") {
-      size.value = checked;
+    if (nestedPath) {
+      // Handle nested field changes (for group and array types)
+      const { fieldType, fieldIndex, subFieldIndex } = nestedPath;
+      
+      if (fieldType === 'group') {
+        if (type === "checkbox") {
+          size.value[fieldIndex].value = checked;
+        } else {
+          size.value[fieldIndex].value = value;
+        }
+      } else if (fieldType === 'array') {
+        if (type === "checkbox") {
+          size.value[fieldIndex][subFieldIndex].value = checked;
+        } else {
+          size.value[fieldIndex][subFieldIndex].value = value;
+        }
+      }
     } else {
-      size.value = value;
+      // Handle simple field changes
+      if (type === "checkbox") {
+        size.value = checked;
+      } else {
+        size.value = value;
+      }
     }
     
     setForm({ ...form, suits: updatedSuits });
+  };
+
+  const addArrayItem = (suitIndex, itemIndex, sizeIndex) => {
+    const updatedSuits = JSON.parse(JSON.stringify(form.suits));
+    const size = updatedSuits[suitIndex].items[itemIndex].sizes[sizeIndex];
+    
+    // Create new item from template
+    const newItem = size.itemTemplate.map(field => ({
+      name: field.name,
+      type: field.type,
+      value: field.type === "checkbox" ? false : "",
+      options: field.options || []
+    }));
+    
+    if (!Array.isArray(size.value)) {
+      size.value = [];
+    }
+    
+    if (size.value.length < (size.maxItems || 10)) {
+      size.value.push(newItem);
+      setForm({ ...form, suits: updatedSuits });
+    }
+  };
+
+  const removeArrayItem = (suitIndex, itemIndex, sizeIndex, arrayItemIndex) => {
+    const updatedSuits = JSON.parse(JSON.stringify(form.suits));
+    const size = updatedSuits[suitIndex].items[itemIndex].sizes[sizeIndex];
+    
+    if (Array.isArray(size.value) && size.value.length > (size.minItems || 0)) {
+      size.value.splice(arrayItemIndex, 1);
+      setForm({ ...form, suits: updatedSuits });
+    }
   };
 
   const validateCustomerForm = () => {
@@ -146,6 +225,7 @@ function Customers() {
         name: form.name || "",
         phone: form.phone || "",
         serialNumber: form.serialNumber || "",
+        rawSpeechInput: form.rawSpeechInput || "",
         suits: (form.suits || []).filter(suit => suit.suitType) // Only include suits with a suitType selected
       };
       
@@ -155,7 +235,7 @@ function Customers() {
       } else {
         await api.post(API_ENDPOINTS.CUSTOMERS, formData);
       }
-      setForm({ name: "", phone: "", serialNumber: "", suits: [] });
+      setForm({ name: "", phone: "", serialNumber: "", rawSpeechInput: "", suits: [] });
       setFormErrors({});
       setFormModal({ isOpen: false });
       await fetchCustomers();
@@ -181,6 +261,7 @@ function Customers() {
       name: cust.name || "",
       phone: cust.phone || "",
       serialNumber: cust.serialNumber || "",
+      rawSpeechInput: cust.rawSpeechInput || "",
       suits: cust.suits ? cust.suits.map(suit => {
         // Get the suit type to access size type information
         const suitTypeId = typeof suit.suitType === 'object' ? suit.suitType._id : suit.suitType;
@@ -241,7 +322,7 @@ function Customers() {
   };
 
   const openAddModal = () => {
-    setForm({ name: "", phone: "", serialNumber: "", suits: [] });
+    setForm({ name: "", phone: "", serialNumber: "", rawSpeechInput: "", suits: [] });
     setEditingId(null);
     setFormErrors({});
     setFormModal({ isOpen: true });
@@ -249,7 +330,7 @@ function Customers() {
 
   const closeFormModal = () => {
     setFormModal({ isOpen: false });
-    setForm({ name: "", phone: "", serialNumber: "", suits: [] });
+    setForm({ name: "", phone: "", serialNumber: "", rawSpeechInput: "", suits: [] });
     setEditingId(null);
     setFormErrors({});
   };
@@ -292,6 +373,88 @@ function Customers() {
     setForm({ ...form, suits: updatedSuits });
   };
 
+  const handleSpeechDataParsed = async (parsedData) => {
+    try {
+      // Set customer basic info including raw speech
+      setForm(prev => ({
+        ...prev,
+        name: parsedData.customer.name || prev.name,
+        phone: parsedData.customer.phone || prev.phone,
+        serialNumber: parsedData.customer.serialNumber || prev.serialNumber,
+        rawSpeechInput: parsedData.rawSpeechInput || ""
+      }));
+
+      // Process suit details if available
+      if (parsedData.suitDetails && parsedData.suitDetails.length > 0) {
+        const speechSuit = parsedData.suitDetails[0];
+        
+        // Find or use first suit type (assuming Shalwar Kameez)
+        let suitTypeToUse = suitTypes.find(st => 
+          st.name.includes('شلوار') || 
+          st.name.toLowerCase().includes('shalwar')
+        );
+        
+        // If no matching suit type, use first available
+        if (!suitTypeToUse && suitTypes.length > 0) {
+          suitTypeToUse = suitTypes[0];
+        }
+
+        if (suitTypeToUse) {
+          // Build suit data matching the structure
+          const newSuit = {
+            suitType: suitTypeToUse._id,
+            items: suitTypeToUse.items.map(templateItem => {
+              // Find matching item in speech data
+              const speechItem = speechSuit.items.find(item => 
+                item.itemName === templateItem.name ||
+                (item.itemName.includes('شلوار') && templateItem.name.includes('شلوار')) ||
+                (item.itemName.includes('قمیض') && templateItem.name.includes('قمیض'))
+              );
+
+              return {
+                itemName: templateItem.name,
+                sizes: templateItem.sizes.map(templateSize => {
+                  // Find matching size in speech data
+                  const speechSize = speechItem?.sizes.find(size => 
+                    size.name === templateSize.name ||
+                    size.name.toLowerCase() === templateSize.name.toLowerCase()
+                  );
+
+                  return {
+                    name: templateSize.name,
+                    type: templateSize.type || 'text',
+                    value: speechSize ? speechSize.value : (templateSize.type === 'checkbox' ? false : ''),
+                    options: templateSize.options || []
+                  };
+                })
+              };
+            })
+          };
+
+          setForm(prev => ({
+            ...prev,
+            suits: [newSuit]
+          }));
+        }
+      }
+
+      toast.success('ڈیٹا کامیابی سے لوڈ ہو گیا!');
+      setSpeechModal({ isOpen: false });
+      setFormModal({ isOpen: true });
+    } catch (error) {
+      console.error('Error processing speech data:', error);
+      toast.error('ڈیٹا لوڈ کرنے میں مسئلہ ہوا');
+    }
+  };
+
+  const openSpeechModal = () => {
+    setSpeechModal({ isOpen: true });
+  };
+
+  const closeSpeechModal = () => {
+    setSpeechModal({ isOpen: false });
+  };
+
   return (
     <div dir="rtl" style={{ direction: 'rtl', textAlign: 'right' }}>
       <ConfirmModal
@@ -303,6 +466,24 @@ function Customers() {
         confirmText="حذف کریں"
         cancelText="منسوخ کریں"
       />
+
+      {/* Speech Input Modal */}
+      {speechModal.isOpen && (
+        <div className="modal-overlay" onClick={closeSpeechModal}>
+          <div className="modal-content" style={{ maxWidth: '900px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>🎤 آواز سے گاہک اور ماپ شامل کریں</h2>
+              <button className="close-btn" onClick={closeSpeechModal}>✕</button>
+            </div>
+            <div className="modal-body">
+              <SpeechToText
+                onDataParsed={handleSpeechDataParsed}
+                onError={(error) => toast.error(error)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Form Modal */}
       {formModal.isOpen && (
@@ -349,6 +530,27 @@ function Customers() {
                     required
                   />
                 </div>
+
+                {/* Show raw speech input if it exists */}
+                {form.rawSpeechInput && (
+                  <div className="form-group" style={{ marginBottom: '20px' }}>
+                    <label style={{ fontWeight: 'bold', color: '#667eea' }}>
+                      🎤 اصل آواز کا متن:
+                    </label>
+                    <div 
+                      style={{ 
+                        background: '#f5f7fa', 
+                        padding: '12px', 
+                        borderRadius: '8px',
+                        border: '2px solid #667eea',
+                        fontSize: '14px',
+                        lineHeight: '1.6'
+                      }}
+                    >
+                      {form.rawSpeechInput}
+                    </div>
+                  </div>
+                )}
 
                 <div className="form-section">
                   <div className="flex gap-10 mb-20">
@@ -473,6 +675,231 @@ function Customers() {
                                 );
                               }
                               
+                              // Group type - nested fields
+                              if (sizeType === "group" && size.fields && size.fields.length > 0) {
+                                return (
+                                  <div key={sizeIndex} className="form-group" style={{ gridColumn: '1 / -1', width: '100%' }}>
+                                    <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>{size.name}</label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', padding: '15px', background: '#f8f9fa', borderRadius: '4px' }}>
+                                      {size.fields.map((field, fieldIndex) => {
+                                        const fieldValue = Array.isArray(size.value) && size.value[fieldIndex] 
+                                          ? size.value[fieldIndex] 
+                                          : { name: field.name, type: field.type, value: field.type === "checkbox" ? false : "", options: field.options || [] };
+                                        
+                                        if (field.type === "text") {
+                                          return (
+                                            <div key={fieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                              <label style={{ fontSize: '13px' }}>{field.name}</label>
+                                              <input
+                                                type="text"
+                                                value={fieldValue.value || ""}
+                                                onChange={(e) =>
+                                                  handleSizeValueChange(
+                                                    e,
+                                                    suitIndex,
+                                                    itemIndex,
+                                                    sizeIndex,
+                                                    { fieldType: 'group', fieldIndex }
+                                                  )
+                                                }
+                                                placeholder={field.name}
+                                              />
+                                            </div>
+                                          );
+                                        }
+                                        
+                                        if (field.type === "checkbox") {
+                                          return (
+                                            <div key={fieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                              <label style={{ fontSize: '13px' }}>{field.name}</label>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={fieldValue.value === true}
+                                                  onChange={(e) =>
+                                                    handleSizeValueChange(
+                                                      e,
+                                                      suitIndex,
+                                                      itemIndex,
+                                                      sizeIndex,
+                                                      { fieldType: 'group', fieldIndex }
+                                                    )
+                                                  }
+                                                  id={`group-checkbox-${suitIndex}-${itemIndex}-${sizeIndex}-${fieldIndex}`}
+                                                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                                />
+                                                <label 
+                                                  htmlFor={`group-checkbox-${suitIndex}-${itemIndex}-${sizeIndex}-${fieldIndex}`}
+                                                  style={{ cursor: 'pointer', fontSize: '13px', margin: 0 }}
+                                                >
+                                                  منتخب کریں
+                                                </label>
+                                              </div>
+                                            </div>
+                                          );
+                                        }
+                                        
+                                        if (field.type === "dropdown" && field.options && field.options.length > 0) {
+                                          return (
+                                            <div key={fieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                              <label style={{ fontSize: '13px' }}>{field.name}</label>
+                                              <select
+                                                value={fieldValue.value || ""}
+                                                onChange={(e) =>
+                                                  handleSizeValueChange(
+                                                    e,
+                                                    suitIndex,
+                                                    itemIndex,
+                                                    sizeIndex,
+                                                    { fieldType: 'group', fieldIndex }
+                                                  )
+                                                }
+                                              >
+                                                <option value="">-- منتخب کریں --</option>
+                                                {field.options.filter(opt => opt && opt.trim() !== "").map((option, optIndex) => (
+                                                  <option key={optIndex} value={option}>
+                                                    {option}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            </div>
+                                          );
+                                        }
+                                        
+                                        return null;
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              
+                              // Array type - repeatable fields
+                              if (sizeType === "array" && size.itemTemplate && size.itemTemplate.length > 0) {
+                                const arrayItems = Array.isArray(size.value) ? size.value : [];
+                                
+                                return (
+                                  <div key={sizeIndex} className="form-group" style={{ gridColumn: '1 / -1', width: '100%' }}>
+                                    <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>{size.name}</label>
+                                    <div style={{ padding: '15px', background: '#fff4e6', borderRadius: '4px' }}>
+                                      {arrayItems.map((arrayItem, arrayItemIndex) => (
+                                        <div key={arrayItemIndex} style={{ marginBottom: '15px', padding: '15px', background: 'white', borderRadius: '4px', border: '1px solid #ddd' }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                            <strong style={{ fontSize: '13px' }}>آئٹم {arrayItemIndex + 1}</strong>
+                                            <button
+                                              type="button"
+                                              onClick={() => removeArrayItem(suitIndex, itemIndex, sizeIndex, arrayItemIndex)}
+                                              className="danger"
+                                              disabled={arrayItems.length <= (size.minItems || 0)}
+                                              style={{ padding: '4px 10px', fontSize: '12px' }}
+                                            >
+                                              حذف
+                                            </button>
+                                          </div>
+                                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
+                                            {size.itemTemplate.map((field, subFieldIndex) => {
+                                              const fieldValue = arrayItem[subFieldIndex] || { value: field.type === "checkbox" ? false : "" };
+                                              
+                                              if (field.type === "text") {
+                                                return (
+                                                  <div key={subFieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                                    <label style={{ fontSize: '12px' }}>{field.name}</label>
+                                                    <input
+                                                      type="text"
+                                                      value={fieldValue.value || ""}
+                                                      onChange={(e) =>
+                                                        handleSizeValueChange(
+                                                          e,
+                                                          suitIndex,
+                                                          itemIndex,
+                                                          sizeIndex,
+                                                          { fieldType: 'array', fieldIndex: arrayItemIndex, subFieldIndex }
+                                                        )
+                                                      }
+                                                      placeholder={field.name}
+                                                      style={{ fontSize: '13px' }}
+                                                    />
+                                                  </div>
+                                                );
+                                              }
+                                              
+                                              if (field.type === "checkbox") {
+                                                return (
+                                                  <div key={subFieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                                    <label style={{ fontSize: '12px' }}>{field.name}</label>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={fieldValue.value === true}
+                                                        onChange={(e) =>
+                                                          handleSizeValueChange(
+                                                            e,
+                                                            suitIndex,
+                                                            itemIndex,
+                                                            sizeIndex,
+                                                            { fieldType: 'array', fieldIndex: arrayItemIndex, subFieldIndex }
+                                                          )
+                                                        }
+                                                        id={`array-checkbox-${suitIndex}-${itemIndex}-${sizeIndex}-${arrayItemIndex}-${subFieldIndex}`}
+                                                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                                      />
+                                                      <label 
+                                                        htmlFor={`array-checkbox-${suitIndex}-${itemIndex}-${sizeIndex}-${arrayItemIndex}-${subFieldIndex}`}
+                                                        style={{ cursor: 'pointer', fontSize: '12px', margin: 0 }}
+                                                      >
+                                                        منتخب کریں
+                                                      </label>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              }
+                                              
+                                              if (field.type === "dropdown" && field.options && field.options.length > 0) {
+                                                return (
+                                                  <div key={subFieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                                    <label style={{ fontSize: '12px' }}>{field.name}</label>
+                                                    <select
+                                                      value={fieldValue.value || ""}
+                                                      onChange={(e) =>
+                                                        handleSizeValueChange(
+                                                          e,
+                                                          suitIndex,
+                                                          itemIndex,
+                                                          sizeIndex,
+                                                          { fieldType: 'array', fieldIndex: arrayItemIndex, subFieldIndex }
+                                                        )
+                                                      }
+                                                      style={{ fontSize: '13px' }}
+                                                    >
+                                                      <option value="">-- منتخب کریں --</option>
+                                                      {field.options.filter(opt => opt && opt.trim() !== "").map((option, optIndex) => (
+                                                        <option key={optIndex} value={option}>
+                                                          {option}
+                                                        </option>
+                                                      ))}
+                                                    </select>
+                                                  </div>
+                                                );
+                                              }
+                                              
+                                              return null;
+                                            })}
+                                          </div>
+                                        </div>
+                                      ))}
+                                      <button
+                                        type="button"
+                                        onClick={() => addArrayItem(suitIndex, itemIndex, sizeIndex)}
+                                        className="secondary"
+                                        disabled={arrayItems.length >= (size.maxItems || 10)}
+                                        style={{ padding: '8px 16px', fontSize: '13px', marginTop: '10px' }}
+                                      >
+                                        + آئٹم شامل کریں
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              
                               return null;
                             })}
                           </div>
@@ -523,13 +950,22 @@ function Customers() {
               }}
             />
           </div>
-          <button 
-            onClick={openAddModal}
-            className="primary"
-            style={{ whiteSpace: 'nowrap' }}
-          >
-            + نیا گاہک شامل کریں
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={openSpeechModal}
+              className="secondary"
+              style={{ whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              🎤 آواز سے شامل کریں
+            </button>
+            <button 
+              onClick={openAddModal}
+              className="primary"
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              + نیا گاہک شامل کریں
+            </button>
+          </div>
         </div>
       </div>
 
@@ -589,6 +1025,24 @@ function Customers() {
                         </div>
                       );
                     })}
+                    {/* Show raw speech input if available */}
+                    {c.rawSpeechInput && (
+                      <div style={{ 
+                        marginTop: '12px', 
+                        padding: '8px', 
+                        background: '#f0f7ff', 
+                        borderRadius: '6px',
+                        borderRight: '3px solid #667eea',
+                        fontSize: '12px'
+                      }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#667eea' }}>
+                          🎤 اصل آواز:
+                        </div>
+                        <div style={{ opacity: 0.9 }}>
+                          {c.rawSpeechInput}
+                        </div>
+                      </div>
+                    )}
                   </td>
                   <td>
                     <div className="action-buttons">

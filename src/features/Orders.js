@@ -180,13 +180,37 @@ function Orders() {
                   // Find matching size in customer data to get existing value
                   const customerSize = customerItem?.sizes?.find(s => s.name === suitTypeSize.name);
                   
+                  let initialValue;
+                  if (suitTypeSize.type === "checkbox") {
+                    initialValue = customerSize?.value !== undefined && customerSize?.value !== null 
+                      ? customerSize.value 
+                      : false;
+                  } else if (suitTypeSize.type === "group") {
+                    // Initialize group with field values
+                    initialValue = customerSize?.value || suitTypeSize.fields.map(field => ({
+                      name: field.name,
+                      type: field.type,
+                      value: field.type === "checkbox" ? false : "",
+                      options: field.options || []
+                    }));
+                  } else if (suitTypeSize.type === "array") {
+                    // Initialize array (empty or with customer data)
+                    initialValue = customerSize?.value || [];
+                  } else {
+                    initialValue = customerSize?.value !== undefined && customerSize?.value !== null 
+                      ? customerSize.value 
+                      : "";
+                  }
+                  
                   return {
                     name: suitTypeSize.name,
                     type: suitTypeSize.type || "text",
-                    value: customerSize?.value !== undefined && customerSize?.value !== null 
-                      ? customerSize.value 
-                      : (suitTypeSize.type === "checkbox" ? false : ""),
-                    options: suitTypeSize.options || []
+                    value: initialValue,
+                    options: suitTypeSize.options || [],
+                    fields: suitTypeSize.fields || [],
+                    itemTemplate: suitTypeSize.itemTemplate || [],
+                    minItems: suitTypeSize.minItems || 0,
+                    maxItems: suitTypeSize.maxItems || 10
                   };
                 }),
               };
@@ -203,7 +227,11 @@ function Orders() {
                     name: size.name,
                     type: suitTypeSize?.type || "text",
                     value: size.value !== null && size.value !== undefined ? size.value : "",
-                    options: suitTypeSize?.options || []
+                    options: suitTypeSize?.options || [],
+                    fields: suitTypeSize?.fields || [],
+                    itemTemplate: suitTypeSize?.itemTemplate || [],
+                    minItems: suitTypeSize?.minItems || 0,
+                    maxItems: suitTypeSize?.maxItems || 10
                   };
                 }),
               };
@@ -260,12 +288,36 @@ function Orders() {
         suitType: selectedSuitType._id,
         items: selectedSuitType.items.map((item) => ({
           itemName: item.name,
-          sizes: item.sizes.map((size) => ({
-            name: size.name,
-            type: size.type || "text",
-            value: size.type === "checkbox" ? false : "",
-            options: size.options || [],
-          })),
+          sizes: item.sizes.map((size) => {
+            let initialValue;
+            if (size.type === "checkbox") {
+              initialValue = false;
+            } else if (size.type === "group") {
+              // Initialize group with all fields
+              initialValue = size.fields.map(field => ({
+                name: field.name,
+                type: field.type,
+                value: field.type === "checkbox" ? false : "",
+                options: field.options || []
+              }));
+            } else if (size.type === "array") {
+              // Initialize empty array
+              initialValue = [];
+            } else {
+              initialValue = "";
+            }
+            
+            return {
+              name: size.name,
+              type: size.type || "text",
+              value: initialValue,
+              options: size.options || [],
+              fields: size.fields || [],
+              itemTemplate: size.itemTemplate || [],
+              minItems: size.minItems || 0,
+              maxItems: size.maxItems || 10
+            };
+          }),
         })),
       };
 
@@ -275,18 +327,70 @@ function Orders() {
     }
   };
 
-  const handleSizeValueChange = (e, suitIndex, itemIndex, sizeIndex) => {
+  const handleSizeValueChange = (e, suitIndex, itemIndex, sizeIndex, nestedPath = null) => {
     const { value, type, checked } = e.target;
-    const updatedSuitDetails = [...form.suitDetails];
+    const updatedSuitDetails = JSON.parse(JSON.stringify(form.suitDetails)); // Deep clone
     const size = updatedSuitDetails[suitIndex].items[itemIndex].sizes[sizeIndex];
     
-    if (type === "checkbox") {
-      size.value = checked;
+    if (nestedPath) {
+      // Handle nested field changes (for group and array types)
+      const { fieldType, fieldIndex, subFieldIndex } = nestedPath;
+      
+      if (fieldType === 'group') {
+        if (type === "checkbox") {
+          size.value[fieldIndex].value = checked;
+        } else {
+          size.value[fieldIndex].value = value;
+        }
+      } else if (fieldType === 'array') {
+        if (type === "checkbox") {
+          size.value[fieldIndex][subFieldIndex].value = checked;
+        } else {
+          size.value[fieldIndex][subFieldIndex].value = value;
+        }
+      }
     } else {
-      size.value = value;
+      // Handle simple field changes
+      if (type === "checkbox") {
+        size.value = checked;
+      } else {
+        size.value = value;
+      }
     }
     
     setForm({ ...form, suitDetails: updatedSuitDetails });
+  };
+
+  const addArrayItem = (suitIndex, itemIndex, sizeIndex) => {
+    const updatedSuitDetails = JSON.parse(JSON.stringify(form.suitDetails));
+    const size = updatedSuitDetails[suitIndex].items[itemIndex].sizes[sizeIndex];
+    
+    // Create new item from template
+    const newItem = size.itemTemplate.map(field => ({
+      name: field.name,
+      type: field.type,
+      value: field.type === "checkbox" ? false : "",
+      options: field.options || []
+    }));
+    
+    if (!Array.isArray(size.value)) {
+      size.value = [];
+    }
+    
+    if (size.value.length < (size.maxItems || 10)) {
+      size.value.push(newItem);
+      setForm({ ...form, suitDetails: updatedSuitDetails });
+    }
+  };
+
+  const removeArrayItem = (suitIndex, itemIndex, sizeIndex, arrayItemIndex) => {
+    const updatedSuitDetails = JSON.parse(JSON.stringify(form.suitDetails));
+    const size = updatedSuitDetails[suitIndex].items[itemIndex].sizes[sizeIndex];
+    
+    if (Array.isArray(size.value) && size.value.length > (size.minItems || 0)) {
+      size.value.splice(arrayItemIndex, 1);
+      setForm({ ...form, suitDetails: updatedSuitDetails });
+    }
   };
 
   const validateOrderForm = () => {
@@ -424,7 +528,11 @@ function Orders() {
                   name: size.name,
                   type: "text",
                   value: size.value !== undefined && size.value !== null ? size.value : "",
-                  options: []
+                  options: [],
+                  fields: [],
+                  itemTemplate: [],
+                  minItems: 0,
+                  maxItems: 10
                 }))
               };
             }
@@ -435,13 +543,35 @@ function Orders() {
                 // Find matching size in order data to get order value
                 const orderSize = item.sizes?.find(s => s.name === suitTypeSize.name);
                 
+                let initialValue;
+                if (suitTypeSize.type === "checkbox") {
+                  initialValue = orderSize?.value !== undefined && orderSize?.value !== null 
+                    ? orderSize.value 
+                    : false;
+                } else if (suitTypeSize.type === "group") {
+                  initialValue = orderSize?.value || suitTypeSize.fields.map(field => ({
+                    name: field.name,
+                    type: field.type,
+                    value: field.type === "checkbox" ? false : "",
+                    options: field.options || []
+                  }));
+                } else if (suitTypeSize.type === "array") {
+                  initialValue = orderSize?.value || [];
+                } else {
+                  initialValue = orderSize?.value !== undefined && orderSize?.value !== null 
+                    ? orderSize.value 
+                    : "";
+                }
+                
                 return {
                   name: suitTypeSize.name,
                   type: suitTypeSize.type || "text",
-                  value: orderSize?.value !== undefined && orderSize?.value !== null 
-                    ? orderSize.value 
-                    : (suitTypeSize.type === "checkbox" ? false : ""),
-                  options: suitTypeSize.options || []
+                  value: initialValue,
+                  options: suitTypeSize.options || [],
+                  fields: suitTypeSize.fields || [],
+                  itemTemplate: suitTypeSize.itemTemplate || [],
+                  minItems: suitTypeSize.minItems || 0,
+                  maxItems: suitTypeSize.maxItems || 10
                 };
               }),
             };
@@ -802,6 +932,231 @@ function Orders() {
                                   </option>
                                 ))}
                               </select>
+                            </div>
+                          );
+                        }
+                        
+                        // Group type - nested fields
+                        if (sizeType === "group" && size.fields && size.fields.length > 0) {
+                          return (
+                            <div key={sizeIndex} className="form-group" style={{ gridColumn: '1 / -1', width: '100%' }}>
+                              <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>{size.name}</label>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', padding: '15px', background: '#f8f9fa', borderRadius: '4px' }}>
+                                {size.fields.map((field, fieldIndex) => {
+                                  const fieldValue = Array.isArray(size.value) && size.value[fieldIndex] 
+                                    ? size.value[fieldIndex] 
+                                    : { name: field.name, type: field.type, value: field.type === "checkbox" ? false : "", options: field.options || [] };
+                                  
+                                  if (field.type === "text") {
+                                    return (
+                                      <div key={fieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                        <label style={{ fontSize: '13px' }}>{field.name}</label>
+                                        <input
+                                          type="text"
+                                          value={fieldValue.value || ""}
+                                          onChange={(e) =>
+                                            handleSizeValueChange(
+                                              e,
+                                              suitIndex,
+                                              itemIndex,
+                                              sizeIndex,
+                                              { fieldType: 'group', fieldIndex }
+                                            )
+                                          }
+                                          placeholder={field.name}
+                                        />
+                                      </div>
+                                    );
+                                  }
+                                  
+                                  if (field.type === "checkbox") {
+                                    return (
+                                      <div key={fieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                        <label style={{ fontSize: '13px' }}>{field.name}</label>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                                          <input
+                                            type="checkbox"
+                                            checked={fieldValue.value === true}
+                                            onChange={(e) =>
+                                              handleSizeValueChange(
+                                                e,
+                                                suitIndex,
+                                                itemIndex,
+                                                sizeIndex,
+                                                { fieldType: 'group', fieldIndex }
+                                              )
+                                            }
+                                            id={`group-checkbox-${suitIndex}-${itemIndex}-${sizeIndex}-${fieldIndex}`}
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                          />
+                                          <label 
+                                            htmlFor={`group-checkbox-${suitIndex}-${itemIndex}-${sizeIndex}-${fieldIndex}`}
+                                            style={{ cursor: 'pointer', fontSize: '13px', margin: 0 }}
+                                          >
+                                            منتخب کریں
+                                          </label>
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+                                  
+                                  if (field.type === "dropdown" && field.options && field.options.length > 0) {
+                                    return (
+                                      <div key={fieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                        <label style={{ fontSize: '13px' }}>{field.name}</label>
+                                        <select
+                                          value={fieldValue.value || ""}
+                                          onChange={(e) =>
+                                            handleSizeValueChange(
+                                              e,
+                                              suitIndex,
+                                              itemIndex,
+                                              sizeIndex,
+                                              { fieldType: 'group', fieldIndex }
+                                            )
+                                          }
+                                        >
+                                          <option value="">-- منتخب کریں --</option>
+                                          {field.options.filter(opt => opt && opt.trim() !== "").map((option, optIndex) => (
+                                            <option key={optIndex} value={option}>
+                                              {option}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    );
+                                  }
+                                  
+                                  return null;
+                                })}
+                              </div>
+                            </div>
+                          );
+                        }
+                        
+                        // Array type - repeatable fields
+                        if (sizeType === "array" && size.itemTemplate && size.itemTemplate.length > 0) {
+                          const arrayItems = Array.isArray(size.value) ? size.value : [];
+                          
+                          return (
+                            <div key={sizeIndex} className="form-group" style={{ gridColumn: '1 / -1', width: '100%' }}>
+                              <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>{size.name}</label>
+                              <div style={{ padding: '15px', background: '#fff4e6', borderRadius: '4px' }}>
+                                {arrayItems.map((arrayItem, arrayItemIndex) => (
+                                  <div key={arrayItemIndex} style={{ marginBottom: '15px', padding: '15px', background: 'white', borderRadius: '4px', border: '1px solid #ddd' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                      <strong style={{ fontSize: '13px' }}>آئٹم {arrayItemIndex + 1}</strong>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeArrayItem(suitIndex, itemIndex, sizeIndex, arrayItemIndex)}
+                                        className="danger"
+                                        disabled={arrayItems.length <= (size.minItems || 0)}
+                                        style={{ padding: '4px 10px', fontSize: '12px' }}
+                                      >
+                                        حذف
+                                      </button>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
+                                      {size.itemTemplate.map((field, subFieldIndex) => {
+                                        const fieldValue = arrayItem[subFieldIndex] || { value: field.type === "checkbox" ? false : "" };
+                                        
+                                        if (field.type === "text") {
+                                          return (
+                                            <div key={subFieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                              <label style={{ fontSize: '12px' }}>{field.name}</label>
+                                              <input
+                                                type="text"
+                                                value={fieldValue.value || ""}
+                                                onChange={(e) =>
+                                                  handleSizeValueChange(
+                                                    e,
+                                                    suitIndex,
+                                                    itemIndex,
+                                                    sizeIndex,
+                                                    { fieldType: 'array', fieldIndex: arrayItemIndex, subFieldIndex }
+                                                  )
+                                                }
+                                                placeholder={field.name}
+                                                style={{ fontSize: '13px' }}
+                                              />
+                                            </div>
+                                          );
+                                        }
+                                        
+                                        if (field.type === "checkbox") {
+                                          return (
+                                            <div key={subFieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                              <label style={{ fontSize: '12px' }}>{field.name}</label>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={fieldValue.value === true}
+                                                  onChange={(e) =>
+                                                    handleSizeValueChange(
+                                                      e,
+                                                      suitIndex,
+                                                      itemIndex,
+                                                      sizeIndex,
+                                                      { fieldType: 'array', fieldIndex: arrayItemIndex, subFieldIndex }
+                                                    )
+                                                  }
+                                                  id={`array-checkbox-${suitIndex}-${itemIndex}-${sizeIndex}-${arrayItemIndex}-${subFieldIndex}`}
+                                                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                                />
+                                                <label 
+                                                  htmlFor={`array-checkbox-${suitIndex}-${itemIndex}-${sizeIndex}-${arrayItemIndex}-${subFieldIndex}`}
+                                                  style={{ cursor: 'pointer', fontSize: '12px', margin: 0 }}
+                                                >
+                                                  منتخب کریں
+                                                </label>
+                                              </div>
+                                            </div>
+                                          );
+                                        }
+                                        
+                                        if (field.type === "dropdown" && field.options && field.options.length > 0) {
+                                          return (
+                                            <div key={subFieldIndex} className="form-group" style={{ marginBottom: 0 }}>
+                                              <label style={{ fontSize: '12px' }}>{field.name}</label>
+                                              <select
+                                                value={fieldValue.value || ""}
+                                                onChange={(e) =>
+                                                  handleSizeValueChange(
+                                                    e,
+                                                    suitIndex,
+                                                    itemIndex,
+                                                    sizeIndex,
+                                                    { fieldType: 'array', fieldIndex: arrayItemIndex, subFieldIndex }
+                                                  )
+                                                }
+                                                style={{ fontSize: '13px' }}
+                                              >
+                                                <option value="">-- منتخب کریں --</option>
+                                                {field.options.filter(opt => opt && opt.trim() !== "").map((option, optIndex) => (
+                                                  <option key={optIndex} value={option}>
+                                                    {option}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            </div>
+                                          );
+                                        }
+                                        
+                                        return null;
+                                      })}
+                                    </div>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => addArrayItem(suitIndex, itemIndex, sizeIndex)}
+                                  className="secondary"
+                                  disabled={arrayItems.length >= (size.maxItems || 10)}
+                                  style={{ padding: '8px 16px', fontSize: '13px', marginTop: '10px' }}
+                                >
+                                  + آئٹم شامل کریں
+                                </button>
+                              </div>
                             </div>
                           );
                         }

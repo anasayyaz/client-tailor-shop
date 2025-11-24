@@ -14,6 +14,15 @@ function Dashboard() {
 
   const navigate = useNavigate();
 
+  // Get time-based greeting
+  const getTimeBasedGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "صبح بخیر";
+    if (hour < 17) return "دوپہر بخیر";
+    if (hour < 20) return "شام بخیر";
+    return "رات بخیر";
+  };
+
   useEffect(() => {
     fetchDashboardData();
   }, []);
@@ -97,11 +106,59 @@ function Dashboard() {
 
   return (
     <div style={{ padding: "20px", direction: "rtl", textAlign: "right" }}>
+      <div
+        style={{
+          textAlign: "center",
+          marginBottom: "30px",
+          padding: "35px 25px",
+          background: "#ffffff",
+          borderRadius: "16px",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+          border: "1px solid #e0e0e0",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: "clamp(28px, 5vw, 52px)",
+            fontWeight: "700",
+            color: "#000000",
+            margin: "0 0 12px 0",
+            direction: "rtl",
+            letterSpacing: "1px",
+            lineHeight: "1.5",
+          }}
+        >
+          السلام علیکم عرفان صاحب
+        </h1>
+        <p
+          style={{
+            fontSize: "clamp(20px, 3vw, 26px)",
+            fontWeight: "600",
+            color: "#333333",
+            margin: "0 0 12px 0",
+            direction: "rtl",
+          }}
+        >
+          {getTimeBasedGreeting()}
+        </p>
+        <p
+          style={{
+            fontSize: "clamp(16px, 2.5vw, 20px)",
+            fontWeight: "400",
+            color: "#666666",
+            margin: 0,
+            direction: "rtl",
+          }}
+        >
+          خوش آمدید! آپ کے کاروبار کا خلاصہ
+        </p>
+      </div>
+      
       <h2
         style={{
           textAlign: "center",
           marginBottom: "20px",
-          fontSize: "32px",
+          fontSize: "28px",
           color: "#2c3e50",
           direction: "rtl",
         }}

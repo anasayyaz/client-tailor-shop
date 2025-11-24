@@ -6,6 +6,8 @@ class SyncService {
   constructor() {
     this.isSyncing = false;
     this.syncCallbacks = [];
+    this.onSyncStart = null;
+    this.onSyncProgress = null;
   }
 
   // Initialize listeners
@@ -45,20 +47,47 @@ class SyncService {
     });
   }
 
+  // Update progress
+  updateProgress(progress) {
+    if (this.onSyncProgress) {
+      try {
+        this.onSyncProgress(Math.min(100, Math.max(0, progress)));
+      } catch (error) {
+        console.error('Error in progress callback:', error);
+      }
+    }
+  }
+
+  // Notify sync start
+  notifySyncStart() {
+    if (this.onSyncStart) {
+      try {
+        this.onSyncStart();
+      } catch (error) {
+        console.error('Error in start callback:', error);
+      }
+    }
+  }
+
   async sync() {
     if (!navigator.onLine || this.isSyncing) {
       return;
     }
 
     this.isSyncing = true;
+    this.notifySyncStart();
+    this.updateProgress(10);
     
     try {
       const queue = await db.getQueue();
+      let currentProgress = 10;
 
       if (queue.length > 0) {
         console.log(`🔄 Syncing ${queue.length} queued operations...`);
+        const progressPerItem = 40 / queue.length; // 40% for queue processing
 
-        for (const item of queue) {
+        for (let i = 0; i < queue.length; i++) {
+          const item = queue[i];
           try {
             let response;
             const store = this.getStoreFromUrl(item.url);
@@ -91,6 +120,10 @@ class SyncService {
             // Remove from queue on success
             await db.removeFromQueue(item.id);
             console.log(`✅ Synced ${item.type} ${item.url}`);
+            
+            // Update progress
+            currentProgress += progressPerItem;
+            this.updateProgress(Math.round(currentProgress));
           } catch (error) {
             console.error(`❌ Failed to sync ${item.type} ${item.url}:`, error);
             // Increment retry count
@@ -103,10 +136,20 @@ class SyncService {
             }
           }
         }
+      } else {
+        // No queue items, jump to 50%
+        currentProgress = 50;
+        this.updateProgress(50);
       }
 
-      // Sync all data from server to ensure consistency
+      // Sync all data from server to ensure consistency (remaining 50%)
+      this.updateProgress(50);
       await this.syncAllData();
+      this.updateProgress(90);
+      
+      // Small delay to show 100%
+      await new Promise(resolve => setTimeout(resolve, 300));
+      this.updateProgress(100);
       
       // Notify callbacks
       this.notifySyncComplete();
@@ -114,6 +157,8 @@ class SyncService {
       console.log('✅ Sync completed successfully');
     } catch (error) {
       console.error('Error during sync:', error);
+      this.updateProgress(100); // Complete even on error
+      this.notifySyncComplete();
     } finally {
       this.isSyncing = false;
     }

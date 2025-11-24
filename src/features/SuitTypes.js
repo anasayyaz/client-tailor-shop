@@ -9,9 +9,21 @@ function SuitTypes() {
   const [suitTypes, setSuitTypes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  const getEmptySize = () => ({
+    name: "",
+    sizeType: "",
+    value: "",
+    options: [],
+    fields: [], // For group type
+    itemTemplate: [], // For array type
+    minItems: 0,
+    maxItems: 10
+  });
+  
   const [form, setForm] = useState({
     name: "",
-    items: [{ name: "", sizes: [{ name: "", sizeType: "", value: "", options: [] }] }],
+    items: [{ name: "", sizes: [getEmptySize()] }],
   });
   const [formErrors, setFormErrors] = useState({});
   const [editingId, setEditingId] = useState(null);
@@ -35,51 +47,71 @@ function SuitTypes() {
     fetchSuitTypes();
   }, []);
 
-  const handleFormChange = (e, itemIndex, sizeIndex) => {
+  const handleFormChange = (e, itemIndex, sizeIndex, nestedFieldIndex = null) => {
     const { name, value, type, checked } = e.target;
-    const updatedForm = { ...form };
+    const updatedForm = JSON.parse(JSON.stringify(form)); // Deep clone
 
     if (name === "typeName") {
       updatedForm.name = value;
-      // Clear error when user starts typing
       if (formErrors.typeName) {
         setFormErrors(prev => ({ ...prev, typeName: "" }));
       }
     } else if (name === "itemName") {
       updatedForm.items[itemIndex].name = value;
-      // Clear error when user starts typing
       if (formErrors[`itemName_${itemIndex}`]) {
         setFormErrors(prev => ({ ...prev, [`itemName_${itemIndex}`]: "" }));
       }
     } else if (name === "sizeName") {
       updatedForm.items[itemIndex].sizes[sizeIndex].name = value;
-      // Clear error when user starts typing
       if (formErrors[`sizeName_${itemIndex}_${sizeIndex}`]) {
         setFormErrors(prev => ({ ...prev, [`sizeName_${itemIndex}_${sizeIndex}`]: "" }));
       }
     } else if (name === "sizeType") {
-      // Only allow setting type if it's not already set (lock after first selection)
-      if (!updatedForm.items[itemIndex].sizes[sizeIndex].sizeType) {
-        updatedForm.items[itemIndex].sizes[sizeIndex].sizeType = value;
-        // Reset value and options when type is first set
-        updatedForm.items[itemIndex].sizes[sizeIndex].value = "";
+      const size = updatedForm.items[itemIndex].sizes[sizeIndex];
+      if (!size.sizeType) {
+        size.sizeType = value;
+        size.value = "";
         if (value === "dropdown") {
-          updatedForm.items[itemIndex].sizes[sizeIndex].options = [""];
+          size.options = [""];
+        } else if (value === "group") {
+          size.fields = [{ name: "", type: "text", value: "", options: [] }];
+        } else if (value === "array") {
+          size.itemTemplate = [{ name: "", type: "text", value: "", options: [] }];
+          size.minItems = 0;
+          size.maxItems = 10;
         } else {
-          updatedForm.items[itemIndex].sizes[sizeIndex].options = [];
+          size.options = [];
+          size.fields = [];
+          size.itemTemplate = [];
         }
       }
-    } else if (name === "sizeValue") {
-      updatedForm.items[itemIndex].sizes[sizeIndex].value = value;
-    } else if (name === "sizeChecked") {
-      updatedForm.items[itemIndex].sizes[sizeIndex].value = checked;
     } else if (name === "dropdownOption") {
       const optionIndex = parseInt(e.target.dataset.optionIndex);
-      const newOptions = [...updatedForm.items[itemIndex].sizes[sizeIndex].options];
-      newOptions[optionIndex] = value;
-      updatedForm.items[itemIndex].sizes[sizeIndex].options = newOptions;
-    } else if (name === "dropdownSelected") {
-      updatedForm.items[itemIndex].sizes[sizeIndex].value = value;
+      updatedForm.items[itemIndex].sizes[sizeIndex].options[optionIndex] = value;
+    } else if (name === "groupFieldName") {
+      updatedForm.items[itemIndex].sizes[sizeIndex].fields[nestedFieldIndex].name = value;
+    } else if (name === "groupFieldType") {
+      const field = updatedForm.items[itemIndex].sizes[sizeIndex].fields[nestedFieldIndex];
+      field.type = value;
+      field.value = value === "checkbox" ? false : "";
+      field.options = value === "dropdown" ? [""] : [];
+    } else if (name === "groupFieldOption") {
+      const optionIndex = parseInt(e.target.dataset.optionIndex);
+      updatedForm.items[itemIndex].sizes[sizeIndex].fields[nestedFieldIndex].options[optionIndex] = value;
+    } else if (name === "templateFieldName") {
+      updatedForm.items[itemIndex].sizes[sizeIndex].itemTemplate[nestedFieldIndex].name = value;
+    } else if (name === "templateFieldType") {
+      const field = updatedForm.items[itemIndex].sizes[sizeIndex].itemTemplate[nestedFieldIndex];
+      field.type = value;
+      field.value = value === "checkbox" ? false : "";
+      field.options = value === "dropdown" ? [""] : [];
+    } else if (name === "templateFieldOption") {
+      const optionIndex = parseInt(e.target.dataset.optionIndex);
+      updatedForm.items[itemIndex].sizes[sizeIndex].itemTemplate[nestedFieldIndex].options[optionIndex] = value;
+    } else if (name === "minItems") {
+      updatedForm.items[itemIndex].sizes[sizeIndex].minItems = parseInt(value) || 0;
+    } else if (name === "maxItems") {
+      updatedForm.items[itemIndex].sizes[sizeIndex].maxItems = parseInt(value) || 10;
     }
 
     setForm(updatedForm);
@@ -88,28 +120,89 @@ function SuitTypes() {
   const addItem = () => {
     setForm({
       ...form,
-      items: [...form.items, { name: "", sizes: [{ name: "", sizeType: "", value: "", options: [] }] }],
+      items: [...form.items, { name: "", sizes: [getEmptySize()] }],
     });
   };
 
   const addSize = (itemIndex) => {
     const newItems = [...form.items];
-    newItems[itemIndex].sizes.push({ name: "", sizeType: "", value: "", options: [] }); // Start with no type selected
+    newItems[itemIndex].sizes.push(getEmptySize());
     setForm({ ...form, items: newItems });
   };
 
   const addDropdownOption = (itemIndex, sizeIndex) => {
-    const newItems = [...form.items];
-    newItems[itemIndex].sizes[sizeIndex].options.push("");
-    setForm({ ...form, items: newItems });
+    const newForm = JSON.parse(JSON.stringify(form));
+    newForm.items[itemIndex].sizes[sizeIndex].options.push("");
+    setForm(newForm);
   };
 
   const removeDropdownOption = (itemIndex, sizeIndex, optionIndex) => {
-    const newItems = [...form.items];
-    newItems[itemIndex].sizes[sizeIndex].options = newItems[itemIndex].sizes[sizeIndex].options.filter(
-      (_, index) => index !== optionIndex
-    );
-    setForm({ ...form, items: newItems });
+    const newForm = JSON.parse(JSON.stringify(form));
+    newForm.items[itemIndex].sizes[sizeIndex].options = 
+      newForm.items[itemIndex].sizes[sizeIndex].options.filter((_, index) => index !== optionIndex);
+    setForm(newForm);
+  };
+
+  const addGroupField = (itemIndex, sizeIndex) => {
+    const newForm = JSON.parse(JSON.stringify(form));
+    newForm.items[itemIndex].sizes[sizeIndex].fields.push({
+      name: "",
+      type: "text",
+      value: "",
+      options: []
+    });
+    setForm(newForm);
+  };
+
+  const removeGroupField = (itemIndex, sizeIndex, fieldIndex) => {
+    const newForm = JSON.parse(JSON.stringify(form));
+    newForm.items[itemIndex].sizes[sizeIndex].fields = 
+      newForm.items[itemIndex].sizes[sizeIndex].fields.filter((_, index) => index !== fieldIndex);
+    setForm(newForm);
+  };
+
+  const addGroupFieldOption = (itemIndex, sizeIndex, fieldIndex) => {
+    const newForm = JSON.parse(JSON.stringify(form));
+    newForm.items[itemIndex].sizes[sizeIndex].fields[fieldIndex].options.push("");
+    setForm(newForm);
+  };
+
+  const removeGroupFieldOption = (itemIndex, sizeIndex, fieldIndex, optionIndex) => {
+    const newForm = JSON.parse(JSON.stringify(form));
+    newForm.items[itemIndex].sizes[sizeIndex].fields[fieldIndex].options = 
+      newForm.items[itemIndex].sizes[sizeIndex].fields[fieldIndex].options.filter((_, index) => index !== optionIndex);
+    setForm(newForm);
+  };
+
+  const addTemplateField = (itemIndex, sizeIndex) => {
+    const newForm = JSON.parse(JSON.stringify(form));
+    newForm.items[itemIndex].sizes[sizeIndex].itemTemplate.push({
+      name: "",
+      type: "text",
+      value: "",
+      options: []
+    });
+    setForm(newForm);
+  };
+
+  const removeTemplateField = (itemIndex, sizeIndex, fieldIndex) => {
+    const newForm = JSON.parse(JSON.stringify(form));
+    newForm.items[itemIndex].sizes[sizeIndex].itemTemplate = 
+      newForm.items[itemIndex].sizes[sizeIndex].itemTemplate.filter((_, index) => index !== fieldIndex);
+    setForm(newForm);
+  };
+
+  const addTemplateFieldOption = (itemIndex, sizeIndex, fieldIndex) => {
+    const newForm = JSON.parse(JSON.stringify(form));
+    newForm.items[itemIndex].sizes[sizeIndex].itemTemplate[fieldIndex].options.push("");
+    setForm(newForm);
+  };
+
+  const removeTemplateFieldOption = (itemIndex, sizeIndex, fieldIndex, optionIndex) => {
+    const newForm = JSON.parse(JSON.stringify(form));
+    newForm.items[itemIndex].sizes[sizeIndex].itemTemplate[fieldIndex].options = 
+      newForm.items[itemIndex].sizes[sizeIndex].itemTemplate[fieldIndex].options.filter((_, index) => index !== optionIndex);
+    setForm(newForm);
   };
 
   const removeItem = (itemIndex) => {
@@ -129,23 +222,19 @@ function SuitTypes() {
     const errors = {};
     let isValid = true;
 
-    // Validate suit type name
     const nameValidation = validateField(form.name, 'suitTypeName', validationOptions.suitTypeName);
     if (!nameValidation.isValid) {
       errors.typeName = nameValidation.message;
       isValid = false;
     }
 
-    // Validate items and sizes
     form.items.forEach((item, itemIndex) => {
-      // Validate item name
       const itemNameValidation = validateField(item.name, 'itemName', validationOptions.itemName);
       if (!itemNameValidation.isValid) {
         errors[`itemName_${itemIndex}`] = itemNameValidation.message;
         isValid = false;
       }
 
-      // Validate sizes
       item.sizes.forEach((size, sizeIndex) => {
         const sizeNameValidation = validateField(size.name, 'sizeName', validationOptions.sizeName);
         if (!sizeNameValidation.isValid) {
@@ -170,7 +259,6 @@ function SuitTypes() {
       setLoading(true);
       const isEditing = !!editingId;
       
-      // Transform form data to match backend model structure
       const formData = {
         name: form.name,
         items: form.items.map(item => ({
@@ -178,16 +266,32 @@ function SuitTypes() {
           sizes: item.sizes.map(size => {
             const sizeData = {
               name: size.name,
-              type: size.sizeType || "text" // Default to text when saving if somehow empty
+              type: size.sizeType || "text"
             };
             
-            if (size.sizeType === "checkbox") {
-              sizeData.value = size.value === true;
-            } else if (size.sizeType === "dropdown") {
-              sizeData.options = size.options || [];
-              sizeData.value = size.value || "";
+            if (size.sizeType === "dropdown") {
+              sizeData.options = size.options.filter(opt => opt && opt.trim() !== "");
+              sizeData.value = "";
+            } else if (size.sizeType === "group") {
+              sizeData.fields = size.fields.map(field => ({
+                name: field.name,
+                type: field.type,
+                value: field.type === "checkbox" ? false : "",
+                options: field.type === "dropdown" ? field.options.filter(opt => opt && opt.trim() !== "") : []
+              }));
+            } else if (size.sizeType === "array") {
+              sizeData.itemTemplate = size.itemTemplate.map(field => ({
+                name: field.name,
+                type: field.type,
+                value: field.type === "checkbox" ? false : "",
+                options: field.type === "dropdown" ? field.options.filter(opt => opt && opt.trim() !== "") : []
+              }));
+              sizeData.minItems = size.minItems || 0;
+              sizeData.maxItems = size.maxItems || 10;
+            } else if (size.sizeType === "checkbox") {
+              sizeData.value = false;
             } else {
-              sizeData.value = size.value || "";
+              sizeData.value = "";
             }
             
             return sizeData;
@@ -201,9 +305,10 @@ function SuitTypes() {
       } else {
         await api.post(API_ENDPOINTS.SUIT_TYPES, formData);
       }
+      
       setForm({
         name: "",
-        items: [{ name: "", sizes: [{ name: "", sizeType: "", value: "", options: [] }] }],
+        items: [{ name: "", sizes: [getEmptySize()] }],
       });
       setFormErrors({});
       setFormModal({ isOpen: false });
@@ -220,18 +325,31 @@ function SuitTypes() {
   };
 
   const handleEdit = (st) => {
-    // Deep copy the suit type data to avoid reference issues
     setForm({
       name: st.name || "",
       items: st.items ? st.items.map(item => ({
         name: item.name || "",
         sizes: item.sizes ? item.sizes.map(size => ({
           name: size.name || "",
-          sizeType: size.type || "", // Map 'type' from backend to 'sizeType' in form (empty if no type set)
+          sizeType: size.type || "",
           value: size.value !== undefined && size.value !== null ? size.value : "",
-          options: size.options || []
-        })) : [{ name: "", sizeType: "", value: "", options: [] }]
-      })) : [{ name: "", sizes: [{ name: "", sizeType: "", value: "", options: [] }] }]
+          options: size.options || [],
+          fields: size.fields ? size.fields.map(field => ({
+            name: field.name || "",
+            type: field.type || "text",
+            value: field.value !== undefined && field.value !== null ? field.value : "",
+            options: field.options || []
+          })) : [],
+          itemTemplate: size.itemTemplate ? size.itemTemplate.map(field => ({
+            name: field.name || "",
+            type: field.type || "text",
+            value: field.value !== undefined && field.value !== null ? field.value : "",
+            options: field.options || []
+          })) : [],
+          minItems: size.minItems || 0,
+          maxItems: size.maxItems || 10
+        })) : [getEmptySize()]
+      })) : [{ name: "", sizes: [getEmptySize()] }]
     });
     setEditingId(st._id);
     setFormErrors({});
@@ -241,8 +359,7 @@ function SuitTypes() {
   const openAddModal = () => {
     setForm({
       name: "",
-      type: "",
-      items: [{ name: "", sizes: [{ name: "", sizeType: "", value: "", options: [] }] }],
+      items: [{ name: "", sizes: [getEmptySize()] }],
     });
     setEditingId(null);
     setFormErrors({});
@@ -253,8 +370,7 @@ function SuitTypes() {
     setFormModal({ isOpen: false });
     setForm({
       name: "",
-      type: "",
-      items: [{ name: "", sizes: [{ name: "", sizeType: "", value: "", options: [] }] }],
+      items: [{ name: "", sizes: [getEmptySize()] }],
     });
     setEditingId(null);
     setFormErrors({});
@@ -285,6 +401,291 @@ function SuitTypes() {
     }
   };
 
+  const renderSizeFieldEditor = (size, itemIndex, sizeIndex) => {
+    return (
+      <div key={sizeIndex} className="suit-type-card" style={{ marginBottom: '10px', padding: '10px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginBottom: '8px', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
+            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>سائز {sizeIndex + 1}</label>
+            <input
+              type="text"
+              name="sizeName"
+              value={size.name}
+              onChange={(e) => handleFormChange(e, itemIndex, sizeIndex)}
+              placeholder="نام"
+              required
+              style={{ width: '100%', padding: '6px 8px', fontSize: '13px', border: '1px solid #ddd', borderRadius: '4px' }}
+            />
+          </div>
+          {!size.sizeType && (
+            <div style={{ flex: '0 1 140px', minWidth: '140px' }}>
+              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>قسم *</label>
+              <select
+                name="sizeType"
+                value={size.sizeType || ""}
+                onChange={(e) => handleFormChange(e, itemIndex, sizeIndex)}
+                required
+                style={{ width: '100%', padding: '6px 8px', fontSize: '13px', border: '1px solid #ddd', borderRadius: '4px' }}
+              >
+                <option value="">-- منتخب کریں --</option>
+                <option value="text">ٹیکسٹ</option>
+                <option value="checkbox">چیک باکس</option>
+                <option value="dropdown">ڈراپ ڈاؤن</option>
+                <option value="group">گروپ (متعدد فیلڈز)</option>
+                <option value="array">اریے (تکرار فیلڈز)</option>
+              </select>
+            </div>
+          )}
+          <button 
+            type="button" 
+            onClick={() => removeSize(itemIndex, sizeIndex)}
+            className="danger"
+            disabled={form.items[itemIndex].sizes.length === 1}
+            style={{ padding: '6px 10px', marginTop: '20px', flex: '0 0 auto', minWidth: '35px', fontSize: '16px', lineHeight: '1' }}
+            title="حذف کریں"
+          >
+            ×
+          </button>
+        </div>
+        
+        {!size.sizeType && (
+          <div style={{ padding: '6px', background: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px', marginBottom: '8px', fontSize: '11px', color: '#856404' }}>
+            ⚠️ قسم منتخب کریں
+          </div>
+        )}
+
+        {size.sizeType === 'dropdown' && (
+          <div style={{ marginTop: '10px', padding: '10px', background: '#f8f9fa', borderRadius: '4px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>ڈراپ ڈاؤن آپشنز:</label>
+            {size.options.map((option, optIdx) => (
+              <div key={optIdx} style={{ display: 'flex', gap: '5px', marginBottom: '5px' }}>
+                <input
+                  type="text"
+                  name="dropdownOption"
+                  data-option-index={optIdx}
+                  value={option}
+                  onChange={(e) => handleFormChange(e, itemIndex, sizeIndex)}
+                  placeholder={`آپشن ${optIdx + 1}`}
+                  style={{ flex: 1, padding: '5px', fontSize: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeDropdownOption(itemIndex, sizeIndex, optIdx)}
+                  className="danger"
+                  disabled={size.options.length === 1}
+                  style={{ padding: '5px 10px', fontSize: '14px' }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => addDropdownOption(itemIndex, sizeIndex)}
+              className="secondary"
+              style={{ padding: '5px 10px', fontSize: '12px', marginTop: '5px' }}
+            >
+              + آپشن شامل کریں
+            </button>
+          </div>
+        )}
+
+        {size.sizeType === 'group' && (
+          <div style={{ marginTop: '10px', padding: '10px', background: '#e7f3ff', borderRadius: '4px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>گروپ فیلڈز:</label>
+            {size.fields && size.fields.map((field, fieldIdx) => (
+              <div key={fieldIdx} style={{ marginBottom: '10px', padding: '8px', background: 'white', borderRadius: '4px', border: '1px solid #ccc' }}>
+                <div style={{ display: 'flex', gap: '5px', marginBottom: '5px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 100px' }}>
+                    <input
+                      type="text"
+                      name="groupFieldName"
+                      value={field.name}
+                      onChange={(e) => handleFormChange(e, itemIndex, sizeIndex, fieldIdx)}
+                      placeholder="فیلڈ کا نام"
+                      style={{ width: '100%', padding: '5px', fontSize: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div style={{ flex: '0 1 100px' }}>
+                    <select
+                      name="groupFieldType"
+                      value={field.type}
+                      onChange={(e) => handleFormChange(e, itemIndex, sizeIndex, fieldIdx)}
+                      style={{ width: '100%', padding: '5px', fontSize: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+                    >
+                      <option value="text">ٹیکسٹ</option>
+                      <option value="checkbox">چیک باکس</option>
+                      <option value="dropdown">ڈراپ ڈاؤن</option>
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeGroupField(itemIndex, sizeIndex, fieldIdx)}
+                    className="danger"
+                    disabled={size.fields.length === 1}
+                    style={{ padding: '5px 10px', fontSize: '14px', flex: '0 0 auto' }}
+                  >
+                    ×
+                  </button>
+                </div>
+                {field.type === 'dropdown' && (
+                  <div style={{ marginTop: '5px', paddingLeft: '10px' }}>
+                    {field.options.map((opt, optIdx) => (
+                      <div key={optIdx} style={{ display: 'flex', gap: '5px', marginBottom: '3px' }}>
+                        <input
+                          type="text"
+                          name="groupFieldOption"
+                          data-option-index={optIdx}
+                          value={opt}
+                          onChange={(e) => handleFormChange(e, itemIndex, sizeIndex, fieldIdx)}
+                          placeholder={`آپشن ${optIdx + 1}`}
+                          style={{ flex: 1, padding: '4px', fontSize: '11px', border: '1px solid #ddd', borderRadius: '4px' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeGroupFieldOption(itemIndex, sizeIndex, fieldIdx, optIdx)}
+                          className="danger"
+                          disabled={field.options.length === 1}
+                          style={{ padding: '4px 8px', fontSize: '12px' }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => addGroupFieldOption(itemIndex, sizeIndex, fieldIdx)}
+                      className="secondary"
+                      style={{ padding: '3px 8px', fontSize: '11px', marginTop: '3px' }}
+                    >
+                      + آپشن
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => addGroupField(itemIndex, sizeIndex)}
+              className="secondary"
+              style={{ padding: '5px 10px', fontSize: '12px', marginTop: '5px' }}
+            >
+              + فیلڈ شامل کریں
+            </button>
+          </div>
+        )}
+
+        {size.sizeType === 'array' && (
+          <div style={{ marginTop: '10px', padding: '10px', background: '#fff4e6', borderRadius: '4px' }}>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>اریے ٹیمپلیٹ فیلڈز:</label>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '11px' }}>کم از کم:</label>
+                <input
+                  type="number"
+                  name="minItems"
+                  value={size.minItems}
+                  onChange={(e) => handleFormChange(e, itemIndex, sizeIndex)}
+                  min="0"
+                  style={{ width: '100%', padding: '5px', fontSize: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '11px' }}>زیادہ سے زیادہ:</label>
+                <input
+                  type="number"
+                  name="maxItems"
+                  value={size.maxItems}
+                  onChange={(e) => handleFormChange(e, itemIndex, sizeIndex)}
+                  min="1"
+                  style={{ width: '100%', padding: '5px', fontSize: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+                />
+              </div>
+            </div>
+            {size.itemTemplate && size.itemTemplate.map((field, fieldIdx) => (
+              <div key={fieldIdx} style={{ marginBottom: '10px', padding: '8px', background: 'white', borderRadius: '4px', border: '1px solid #ccc' }}>
+                <div style={{ display: 'flex', gap: '5px', marginBottom: '5px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 100px' }}>
+                    <input
+                      type="text"
+                      name="templateFieldName"
+                      value={field.name}
+                      onChange={(e) => handleFormChange(e, itemIndex, sizeIndex, fieldIdx)}
+                      placeholder="فیلڈ کا نام"
+                      style={{ width: '100%', padding: '5px', fontSize: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+                    />
+                  </div>
+                  <div style={{ flex: '0 1 100px' }}>
+                    <select
+                      name="templateFieldType"
+                      value={field.type}
+                      onChange={(e) => handleFormChange(e, itemIndex, sizeIndex, fieldIdx)}
+                      style={{ width: '100%', padding: '5px', fontSize: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+                    >
+                      <option value="text">ٹیکسٹ</option>
+                      <option value="checkbox">چیک باکس</option>
+                      <option value="dropdown">ڈراپ ڈاؤن</option>
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeTemplateField(itemIndex, sizeIndex, fieldIdx)}
+                    className="danger"
+                    disabled={size.itemTemplate.length === 1}
+                    style={{ padding: '5px 10px', fontSize: '14px', flex: '0 0 auto' }}
+                  >
+                    ×
+                  </button>
+                </div>
+                {field.type === 'dropdown' && (
+                  <div style={{ marginTop: '5px', paddingLeft: '10px' }}>
+                    {field.options.map((opt, optIdx) => (
+                      <div key={optIdx} style={{ display: 'flex', gap: '5px', marginBottom: '3px' }}>
+                        <input
+                          type="text"
+                          name="templateFieldOption"
+                          data-option-index={optIdx}
+                          value={opt}
+                          onChange={(e) => handleFormChange(e, itemIndex, sizeIndex, fieldIdx)}
+                          placeholder={`آپشن ${optIdx + 1}`}
+                          style={{ flex: 1, padding: '4px', fontSize: '11px', border: '1px solid #ddd', borderRadius: '4px' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeTemplateFieldOption(itemIndex, sizeIndex, fieldIdx, optIdx)}
+                          className="danger"
+                          disabled={field.options.length === 1}
+                          style={{ padding: '4px 8px', fontSize: '12px' }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => addTemplateFieldOption(itemIndex, sizeIndex, fieldIdx)}
+                      className="secondary"
+                      style={{ padding: '3px 8px', fontSize: '11px', marginTop: '3px' }}
+                    >
+                      + آپشن
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => addTemplateField(itemIndex, sizeIndex)}
+              className="secondary"
+              style={{ padding: '5px 10px', fontSize: '12px', marginTop: '5px' }}
+            >
+              + فیلڈ شامل کریں
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div dir="rtl" style={{ direction: 'rtl', textAlign: 'right' }}>
@@ -293,56 +694,31 @@ function SuitTypes() {
           .suit-type-card {
             padding: 12px !important;
           }
-          
           .form-row {
             grid-template-columns: 1fr !important;
             gap: 15px !important;
           }
-          
           .modal-content .form-group {
             min-width: 100% !important;
             flex: 1 1 100% !important;
           }
-          
           .modal-content .flex {
             flex-direction: column !important;
           }
-          
           .modal-content .flex > * {
             width: 100% !important;
             min-width: 100% !important;
             flex: 1 1 100% !important;
           }
-          
-          .modal-content button[style*="alignSelf"] {
-            align-self: stretch !important;
-            margin-top: 10px !important;
-          }
-          
-          .modal-content .suit-type-card > div[style*="display: flex"] {
-            flex-direction: column !important;
-          }
-          
-          .modal-content .suit-type-card > div[style*="display: flex"] > * {
-            width: 100% !important;
-            min-width: 100% !important;
-            margin-top: 10px !important;
-          }
-          
-          .modal-content .suit-type-card > div[style*="display: flex"] > button {
-            margin-top: 10px !important;
-            align-self: stretch !important;
-          }
         }
         
         @media (max-width: 480px) {
-          .modal-content .suit-type-card {
-            padding: 10px !important;
-            margin-bottom: 15px !important;
+          .table-wrapper table td > div {
+            flex-direction: column !important;
           }
-          
-          .modal-content .form-section {
-            padding: 12px !important;
+          .table-wrapper table td > div > div {
+            width: 100% !important;
+            min-width: 100% !important;
           }
         }
       `}</style>
@@ -357,10 +733,9 @@ function SuitTypes() {
         cancelText="منسوخ کریں"
       />
 
-      {/* Form Modal */}
       {formModal.isOpen && (
         <div className="modal-overlay" onClick={closeFormModal}>
-          <div className="modal-content" style={{ maxWidth: '900px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content" style={{ maxWidth: '900px', width: '100%', maxHeight: '90vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{editingId ? "سوٹ کی قسم میں ترمیم" : "نیا سوٹ کی قسم شامل کریں"}</h3>
               <button className="modal-close" onClick={closeFormModal}>×</button>
@@ -401,27 +776,14 @@ function SuitTypes() {
                             onChange={(e) => handleFormChange(e, i)}
                             placeholder="آئٹم کا نام"
                             required
-                            style={{
-                              width: '100%',
-                              padding: '8px 10px',
-                              fontSize: '14px',
-                              border: '1px solid #ddd',
-                              borderRadius: '4px'
-                            }}
+                            style={{ width: '100%', padding: '8px 10px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
                           />
                         </div>
-                        
                         <button 
                           type="button" 
                           onClick={() => removeItem(i)}
                           className="danger"
-                          style={{ 
-                            alignSelf: 'flex-end', 
-                            marginTop: '24px', 
-                            whiteSpace: 'nowrap',
-                            padding: '8px 12px',
-                            fontSize: '13px'
-                          }}
+                          style={{ alignSelf: 'flex-end', marginTop: '24px', whiteSpace: 'nowrap', padding: '8px 12px', fontSize: '13px' }}
                           disabled={form.items.length === 1}
                         >
                           حذف
@@ -433,119 +795,27 @@ function SuitTypes() {
                           type="button" 
                           onClick={() => addSize(i)} 
                           className="secondary"
-                          style={{
-                            padding: '6px 12px',
-                            fontSize: '12px'
-                          }}
+                          style={{ padding: '6px 12px', fontSize: '12px' }}
                         >
                           + سائز شامل کریں
                         </button>
                       </div>
 
                       <div className="form-row" style={{ gap: '10px' }}>
-                        {item.sizes.map((size, j) => (
-                          <div key={j} className="suit-type-card" style={{ marginBottom: '10px', padding: '10px' }}>
-                              <div style={{ 
-                                display: 'flex', 
-                                gap: '8px', 
-                                alignItems: 'flex-start', 
-                                marginBottom: '8px',
-                                flexWrap: 'wrap'
-                              }}>
-                                <div style={{ flex: '1 1 120px', minWidth: '120px' }}>
-                                  <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>سائز {j + 1}</label>
-                                  <input
-                                    type="text"
-                                    name="sizeName"
-                                    value={size.name}
-                                    onChange={(e) => handleFormChange(e, i, j)}
-                                    placeholder="نام"
-                                    required
-                                    style={{ 
-                                      width: '100%',
-                                      padding: '6px 8px',
-                                      fontSize: '13px',
-                                      border: '1px solid #ddd',
-                                      borderRadius: '4px'
-                                    }}
-                                  />
-                                </div>
-                                {!size.sizeType && (
-                                  <div style={{ flex: '0 1 120px', minWidth: '120px' }}>
-                                    <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }}>قسم *</label>
-                                    <select
-                                      name="sizeType"
-                                      value={size.sizeType || ""}
-                                      onChange={(e) => handleFormChange(e, i, j)}
-                                      required
-                                      style={{
-                                        width: '100%',
-                                        padding: '6px 8px',
-                                        fontSize: '13px',
-                                        border: '1px solid #ddd',
-                                        borderRadius: '4px'
-                                      }}
-                                    >
-                                      <option value="">-- منتخب کریں --</option>
-                                      <option value="text">ٹیکسٹ</option>
-                                      <option value="checkbox">چیک باکس</option>
-                                      <option value="dropdown">ڈراپ ڈاؤن</option>
-                                    </select>
-                                  </div>
-                                )}
-                                <button 
-                                  type="button" 
-                                  onClick={() => removeSize(i, j)}
-                                  className="danger"
-                                  disabled={item.sizes.length === 1}
-                                  style={{ 
-                                    padding: '6px 10px', 
-                                    marginTop: '20px',
-                                    flex: '0 0 auto',
-                                    minWidth: '35px',
-                                    fontSize: '16px',
-                                    lineHeight: '1'
-                                  }}
-                                  title="حذف کریں"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                              
-                              {!size.sizeType && (
-                                <div style={{ 
-                                  padding: '6px', 
-                                  background: '#fff3cd', 
-                                  border: '1px solid #ffc107', 
-                                  borderRadius: '4px',
-                                  marginBottom: '8px',
-                                  fontSize: '11px',
-                                  color: '#856404'
-                                }}>
-                                  ⚠️ قسم منتخب کریں
-                                </div>
-                              )}
-
-                              {/* Input fields (text, checkbox, dropdown) will only be shown when placing orders or taking customer measurements */}
-                          </div>
-                        ))}
+                        {item.sizes.map((size, j) => renderSizeFieldEditor(size, i, j))}
                       </div>
                     </div>
                   ))}
                 </div>
 
                 <div className="action-buttons">
-                    <button type="submit" className="primary">
-                      {editingId ? "تبدیلیاں محفوظ کریں" : "سوٹ کی قسم شامل کریں"}
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={closeFormModal}
-                      className="secondary"
-                    >
-                      منسوخ کریں
-                    </button>
-                  </div>
+                  <button type="submit" className="primary">
+                    {editingId ? "تبدیلیاں محفوظ کریں" : "سوٹ کی قسم شامل کریں"}
+                  </button>
+                  <button type="button" onClick={closeFormModal} className="secondary">
+                    منسوخ کریں
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -554,7 +824,6 @@ function SuitTypes() {
 
       <h2 style={{ direction: 'rtl', textAlign: 'right' }}>سوٹ کی اقسام کا انتظام</h2>
 
-      {/* Search and Add Button */}
       <div className="card" style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: '200px' }}>
@@ -563,26 +832,15 @@ function SuitTypes() {
               placeholder="سوٹ کی قسم کے نام سے تلاش کریں..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '14px',
-                border: '1px solid #ddd',
-                borderRadius: '4px'
-              }}
+              style={{ width: '100%', padding: '12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
             />
           </div>
-          <button 
-            onClick={openAddModal}
-            className="primary"
-            style={{ whiteSpace: 'nowrap' }}
-          >
+          <button onClick={openAddModal} className="primary" style={{ whiteSpace: 'nowrap' }}>
             + نیا سوٹ کی قسم شامل کریں
           </button>
         </div>
       </div>
 
-      {/* Suit Types List */}
       <div className="card">
         <h3>موجودہ سوٹ کی اقسام</h3>
         
@@ -597,65 +855,104 @@ function SuitTypes() {
         ) : (
           <div className="table-wrapper" dir="rtl">
             <table dir="rtl">
-                      <thead>
-                        <tr>
-                          <th>نام</th>
-                          <th>آئٹمز اور سائز</th>
-                          <th>عملیات</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredSuitTypes.map((suit) => (
-                          <tr key={suit._id}>
-                            <td>
-                              <strong>{suit.name}</strong>
-                            </td>
-                            <td>
-                              {suit.items.map((item, i) => (
-                                <div key={i} className="mb-20">
-                                  <div className="status-badge status-pending">
-                                    {item.name}
+              <thead>
+                <tr>
+                  <th>نام</th>
+                  <th>آئٹمز اور سائز</th>
+                  <th>عملیات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSuitTypes.map((suit) => (
+                  <tr key={suit._id}>
+                    <td><strong>{suit.name}</strong></td>
+                    <td>
+                      {suit.items.map((item, i) => (
+                        <div key={i} style={{ marginBottom: '20px' }}>
+                          <div className="status-badge status-pending" style={{ marginBottom: '10px' }}>{item.name}</div>
+                          <div style={{ 
+                            display: 'flex', 
+                            flexWrap: 'wrap', 
+                            gap: '8px',
+                            fontSize: '12px' 
+                          }}>
+                            {item.sizes.map((s, j) => {
+                              let typeLabel = '';
+                              let details = '';
+                              
+                              if (s.type === 'text') {
+                                typeLabel = 'ٹیکسٹ';
+                              } else if (s.type === 'checkbox') {
+                                typeLabel = 'چیک باکس';
+                              } else if (s.type === 'dropdown') {
+                                typeLabel = 'ڈراپ ڈاؤن';
+                                details = s.options && s.options.length > 0 
+                                  ? ` (${s.options.filter(opt => opt).join(', ')})` 
+                                  : '';
+                              } else if (s.type === 'group') {
+                                typeLabel = 'گروپ';
+                                details = s.fields && s.fields.length > 0
+                                  ? ` (${s.fields.map(f => `${f.name}`).join(', ')})`
+                                  : '';
+                              } else if (s.type === 'array') {
+                                typeLabel = 'اریے';
+                                details = s.itemTemplate && s.itemTemplate.length > 0
+                                  ? ` (${s.itemTemplate.map(f => `${f.name}`).join(', ')})`
+                                  : '';
+                              }
+                              
+                              return (
+                                <div 
+                                  key={j} 
+                                  style={{ 
+                                    background: '#e8f5e9',
+                                    border: '1px solid #4caf50',
+                                    borderRadius: '6px',
+                                    padding: '8px 12px',
+                                    flex: '0 1 auto',
+                                    minWidth: '120px',
+                                    maxWidth: '100%'
+                                  }}
+                                >
+                                  <div style={{ 
+                                    fontWeight: '600', 
+                                    color: '#2e7d32',
+                                    marginBottom: '4px',
+                                    fontSize: '13px'
+                                  }}>
+                                    {s.name}
                                   </div>
-                                  <div style={{ marginTop: '8px', fontSize: '13px' }}>
-                                    <strong>سائز:</strong>{" "}
-                                    {item.sizes.map((s, j) => {
-                                      let displayValue = "";
-                                      if (s.type === "checkbox") {
-                                        displayValue = s.value ? "✓" : "";
-                                      } else if (s.type === "dropdown") {
-                                        displayValue = s.value ? `(${s.value})` : "";
-                                      } else {
-                                        displayValue = s.value ? `: ${s.value}` : "";
-                                      }
-                                      
-                                      return (
-                                        <span key={j} style={{ marginLeft: '5px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                          <span className="status-badge status-completed">
-                                            {s.name}{displayValue}
-                                          </span>
-                                        </span>
-                                      );
-                                    })}
+                                  <div style={{ 
+                                    fontSize: '11px', 
+                                    color: '#555',
+                                    fontWeight: '500'
+                                  }}>
+                                    {typeLabel}
                                   </div>
+                                  {details && (
+                                    <div style={{ 
+                                      fontSize: '10px', 
+                                      color: '#666',
+                                      marginTop: '4px',
+                                      fontStyle: 'italic',
+                                      wordBreak: 'break-word'
+                                    }}>
+                                      {details}
+                                    </div>
+                                  )}
                                 </div>
-                              ))}
-                            </td>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </td>
                     <td>
                       <div className="action-buttons">
-                        <button 
-                          onClick={() => handleEdit(suit)}
-                          className="secondary"
-                          title="ترمیم"
-                          style={{ fontSize: '18px', padding: '8px 12px' }}
-                        >
+                        <button onClick={() => handleEdit(suit)} className="secondary" title="ترمیم" style={{ fontSize: '18px', padding: '8px 12px' }}>
                           ✏️
                         </button>
-                        <button 
-                          onClick={() => handleDelete(suit._id)}
-                          className="danger"
-                          title="حذف"
-                          style={{ fontSize: '18px', padding: '8px 12px' }}
-                        >
+                        <button onClick={() => handleDelete(suit._id)} className="danger" title="حذف" style={{ fontSize: '18px', padding: '8px 12px' }}>
                           🗑️
                         </button>
                       </div>
